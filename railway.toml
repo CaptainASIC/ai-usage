@@ -2,17 +2,17 @@
 #
 # Deploy from GitHub repo root — no root directory override needed.
 # Railpack auto-detects Python from pyproject.toml at repo root.
-# Build step compiles the React frontend first; uv installs Python deps.
+# Node 22 is declared in railpack.json packages so mise installs it.
+# Build step: pnpm builds the React frontend; uv syncs Python deps.
 # FastAPI serves the built frontend as static files at runtime.
 #
 # Required environment variables: see .env.example
 
 [build]
 builder = "RAILPACK"
-buildCommand = "cd frontend && npm install -g pnpm --silent && pnpm install --frozen-lockfile && pnpm build && cd .."
 
 [deploy]
-startCommand = "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
+startCommand = "uv run uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"

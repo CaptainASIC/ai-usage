@@ -21,7 +21,8 @@ app.use(express.static(DIST, {
 }));
 
 // SPA fallback — all non-asset routes serve index.html
-app.get('*', (_req, res) => {
+// Note: Express 5 + path-to-regexp v8 requires named wildcard '/*splat', not bare '*'
+app.get('/*splat', (_req, res) => {
   res.sendFile(join(DIST, 'index.html'));
 });
 

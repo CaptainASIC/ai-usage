@@ -2,8 +2,8 @@
 AI Credits Tracker — Main FastAPI Application
 
 Single-service deployment: FastAPI serves the API and the built React frontend
-as static files. Railway root directory is set to /backend; the build step
-compiles the frontend into ../frontend/dist before uvicorn starts.
+as static files. All Python source lives at repo root; the Railpack build step
+compiles the frontend into ./frontend/dist before uvicorn starts.
 """
 
 import logging
@@ -64,10 +64,9 @@ app.include_router(credits.router, prefix="/api/credits", tags=["credits"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 
 # Serve React frontend static files (production build)
-# When running on Railway, CWD is /backend and the frontend dist is at
-# /frontend/dist (one level up, then into frontend/dist).
-_HERE = Path(__file__).parent          # /backend
-FRONTEND_DIST = _HERE.parent / "frontend" / "dist"
+# main.py lives at repo root; frontend/dist is a sibling directory.
+_HERE = Path(__file__).parent          # repo root
+FRONTEND_DIST = _HERE / "frontend" / "dist"
 
 if FRONTEND_DIST.exists():
     logger.info(f"Serving frontend from {FRONTEND_DIST}")

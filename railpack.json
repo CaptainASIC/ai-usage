@@ -4,7 +4,7 @@
   "steps": {
     "build": {
       "commands": [
-        "cd ../frontend && npm install -g pnpm --silent && pnpm install --frozen-lockfile && pnpm build"
+        "cd frontend && npm install -g pnpm --silent && pnpm install --frozen-lockfile && pnpm build && cd .."
       ]
     }
   },

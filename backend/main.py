@@ -1,10 +1,12 @@
 """
-AI Credits Tracker - Main FastAPI Application
-Serves the API and static frontend files.
+AI Credits Tracker — Main FastAPI Application
+
+Single-service deployment: FastAPI serves the API and the built React frontend
+as static files. Railway root directory is set to /backend; the build step
+compiles the frontend into ../frontend/dist before uvicorn starts.
 """
 
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -42,10 +44,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for development
+# CORS — allow localhost in development; in production the frontend is served
+# by this same process so no cross-origin requests occur.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,14 +63,26 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(credits.router, prefix="/api/credits", tags=["credits"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 
-# Serve React frontend static files (production)
-FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+# Serve React frontend static files (production build)
+# When running on Railway, CWD is /backend and the frontend dist is at
+# /frontend/dist (one level up, then into frontend/dist).
+_HERE = Path(__file__).parent          # /backend
+FRONTEND_DIST = _HERE.parent / "frontend" / "dist"
 
 if FRONTEND_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+    logger.info(f"Serving frontend from {FRONTEND_DIST}")
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(FRONTEND_DIST / "assets")),
+        name="assets",
+    )
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
         """Serve the React SPA for all non-API routes."""
-        index = FRONTEND_DIST / "index.html"
-        return FileResponse(str(index))
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+else:
+    logger.warning(
+        f"Frontend dist not found at {FRONTEND_DIST}. "
+        "API-only mode — run 'pnpm build' in /frontend to enable the dashboard."
+    )

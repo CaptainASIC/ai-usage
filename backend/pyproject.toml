@@ -1,7 +1,7 @@
 [project]
 name = "ai-credits-tracker"
 version = "1.0.0"
-description = "AI Credits Usage Tracker - Dashboard for monitoring cloud AI service balances"
+description = "AI Credits Usage Tracker — Dashboard for monitoring cloud AI service balances"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -19,8 +19,8 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
 ]

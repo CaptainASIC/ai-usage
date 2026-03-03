@@ -1,8 +1,8 @@
 /**
- * SummaryBar - top bar showing total balance, refresh button, and status.
+ * SummaryBar - top bar showing total balance, refresh button, and settings link.
  */
 
-import { RefreshCw, Zap, Clock } from 'lucide-react';
+import { RefreshCw, Zap, Clock, Settings } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { DashboardResponse } from '../types';
 import { formatUSD, formatRelativeTime } from '../utils/format';
@@ -13,13 +13,21 @@ interface SummaryBarProps {
   refreshing: boolean;
   lastFetch: Date | null;
   onRefresh: () => void;
+  onSettingsClick: () => void;
 }
 
-export function SummaryBar({ data, loading, refreshing, lastFetch, onRefresh }: SummaryBarProps) {
-  const providers = data?.providers ?? [];
+export function SummaryBar({
+  data,
+  loading,
+  refreshing,
+  lastFetch,
+  onRefresh,
+  onSettingsClick,
+}: SummaryBarProps) {
+  const providers  = data?.providers ?? [];
   const configured = providers.filter((p) => p.status === 'ok' || p.status === 'error').length;
-  const active = providers.filter((p) => p.status === 'ok').length;
-  const errors = providers.filter((p) => p.status === 'error').length;
+  const active     = providers.filter((p) => p.status === 'ok').length;
+  const errors     = providers.filter((p) => p.status === 'error').length;
 
   return (
     <div className="flex items-center justify-between gap-4 px-6 py-4 bg-gray-900/80 border-b border-gray-800/60 backdrop-blur-sm sticky top-0 z-10">
@@ -58,7 +66,7 @@ export function SummaryBar({ data, loading, refreshing, lastFetch, onRefresh }: 
         <Stat label="Configured" value={configured} color="text-gray-400" />
       </div>
 
-      {/* Right: last updated + refresh */}
+      {/* Right: last updated + refresh + settings */}
       <div className="flex items-center gap-3">
         {lastFetch && (
           <div className="hidden sm:flex items-center gap-1.5 text-xs text-gray-600">
@@ -87,6 +95,20 @@ export function SummaryBar({ data, loading, refreshing, lastFetch, onRefresh }: 
           >
             <RefreshCw size={12} className={clsx(refreshing && 'animate-spin')} />
             {refreshing ? 'Refreshing...' : 'Refresh All'}
+          </button>
+
+          <button
+            onClick={onSettingsClick}
+            className={clsx(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium',
+              'bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-gray-100',
+              'border border-gray-700/60 hover:border-gray-600',
+              'transition-all duration-150',
+            )}
+            title="Provider Settings"
+          >
+            <Settings size={12} />
+            <span className="hidden sm:inline">Settings</span>
           </button>
         </div>
       </div>

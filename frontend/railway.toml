@@ -1,0 +1,18 @@
+# Railway configuration — AI Credits Tracker Frontend Service
+#
+# Root directory in Railway: /frontend
+# Railpack detects Node from package.json.
+# Builds the React app with pnpm, serves via a lightweight static server.
+#
+# Required environment variables:
+#   VITE_API_URL = https://your-backend-service.railway.app
+
+[build]
+builder = "RAILPACK"
+
+[deploy]
+startCommand = "node server.js"
+healthcheckPath = "/"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

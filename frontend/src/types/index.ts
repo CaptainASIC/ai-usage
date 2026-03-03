@@ -3,10 +3,19 @@
  */
 
 export type ProviderStatus = 'ok' | 'error' | 'unconfigured' | 'stale' | 'disabled';
+export type ProviderCategory = 'ai' | 'cloud';
+
+export interface AuthField {
+  key: string;
+  label: string;
+  placeholder: string;
+  secret: boolean;
+}
 
 export interface BalanceSnapshot {
   provider_id: string;
   provider_name: string;
+  category: ProviderCategory;
   balance_usd: number | null;
   total_credits: number | null;
   used_credits: number | null;
@@ -27,8 +36,9 @@ export interface DashboardResponse {
 export interface ProviderMeta {
   id: string;
   name: string;
+  category: ProviderCategory;
   auth_type: string;
-  auth_fields: string[];
+  auth_fields: AuthField[];
   auth_help: string;
   tier: number;
   note: string | null;
@@ -41,9 +51,10 @@ export interface ProviderMeta {
 export interface ProviderSettings {
   id: string;
   name: string;
+  category: ProviderCategory;
   enabled: boolean;
   auth_type: string;
-  auth_fields: string[];
+  auth_fields: AuthField[];
   auth_help: string;
   credentials: Record<string, string | null>;
   refresh_interval: number;

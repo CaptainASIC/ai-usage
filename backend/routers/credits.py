@@ -44,6 +44,7 @@ async def get_dashboard():
     for provider_id, meta in PROVIDER_REGISTRY.items():
         config = config_map.get(provider_id)
         name = meta["name"]
+        category = meta.get("category", "ai")
 
         if provider_id in cached_map:
             row = cached_map[provider_id]
@@ -57,6 +58,7 @@ async def get_dashboard():
             snapshot = BalanceSnapshot(
                 provider_id=provider_id,
                 provider_name=name,
+                category=category,
                 balance_usd=row.get("balance_usd"),
                 total_credits=row.get("total_credits"),
                 used_credits=row.get("used_credits"),
@@ -71,6 +73,7 @@ async def get_dashboard():
             snapshot = BalanceSnapshot(
                 provider_id=provider_id,
                 provider_name=name,
+                category=category,
                 status="disabled",
                 error_message="Provider is disabled",
             )
@@ -78,6 +81,7 @@ async def get_dashboard():
             snapshot = BalanceSnapshot(
                 provider_id=provider_id,
                 provider_name=name,
+                category=category,
                 status="unconfigured",
                 error_message="No credentials configured",
             )
@@ -149,6 +153,7 @@ async def list_providers():
         result.append({
             "id": provider_id,
             "name": meta["name"],
+            "category": meta.get("category", "ai"),
             "auth_type": meta["auth_type"],
             "auth_fields": meta["auth_fields"],
             "auth_help": meta["auth_help"],

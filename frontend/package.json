@@ -1,5 +1,5 @@
 {
-  "name": "frontend-new",
+  "name": "ai-credits-tracker-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,11 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server.js"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
     "clsx": "^2.1.1",
+    "express": "^5.2.1",
     "lucide-react": "^0.576.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

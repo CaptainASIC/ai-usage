@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class ProviderCredentials(BaseModel):
     """Credentials for a provider. Fields vary by provider type."""
     api_key: Optional[str] = None
+    api_secret: Optional[str] = None
     admin_key: Optional[str] = None
     management_key: Optional[str] = None
     session_cookie: Optional[str] = None
@@ -40,6 +41,7 @@ class BalanceSnapshot(BaseModel):
     """A point-in-time snapshot of a provider's balance."""
     provider_id: str
     provider_name: str
+    category: str = "ai"  # "ai" or "cloud"
     balance_usd: Optional[float] = None
     total_credits: Optional[float] = None
     used_credits: Optional[float] = None

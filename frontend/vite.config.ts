@@ -9,9 +9,10 @@ export default defineConfig({
   ],
   server: {
     allowedHosts: true,
+    // Dev proxy: forwards /api calls to the local backend
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
         changeOrigin: true,
       },
     },

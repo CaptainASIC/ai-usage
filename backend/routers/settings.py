@@ -36,6 +36,7 @@ async def get_provider_settings():
         result.append({
             "id": config.id,
             "name": config.name,
+            "category": meta.get("category", "ai"),
             "enabled": config.enabled,
             "auth_type": config.auth_type,
             "auth_fields": meta.get("auth_fields", []),

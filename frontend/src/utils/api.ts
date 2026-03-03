@@ -11,7 +11,11 @@ import type {
   HealthResponse,
 } from '../types';
 
-const BASE_URL = '/api';
+// In production (split deployment), VITE_API_URL points to the backend Railway service.
+// In development, the Vite proxy forwards /api to localhost:8000.
+const BASE_URL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {

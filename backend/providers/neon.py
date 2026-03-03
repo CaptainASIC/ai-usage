@@ -1,0 +1,136 @@
+"""
+Neon DB provider — fetches compute usage via the Neon Console API.
+
+Endpoint: GET https://console.neon.tech/api/v2/consumption_history/account
+Auth: Bearer API key (from console.neon.tech/app/settings/api-keys)
+
+Returns compute unit seconds and storage bytes used in the current period.
+Available for Launch, Scale, Agent, and Enterprise plans.
+"""
+
+import logging
+import httpx
+from models.schemas import BalanceSnapshot
+from providers.base import BaseProvider
+
+logger = logging.getLogger(__name__)
+
+NEON_API_BASE = "https://console.neon.tech/api/v2"
+
+
+class NeonProvider(BaseProvider):
+    """Neon DB cloud database provider — usage and compute consumption."""
+
+    provider_id   = "neon"
+    provider_name = "Neon DB"
+    auth_type     = "api_key"
+    category      = "cloud"
+
+    def is_configured(self) -> bool:
+        return bool(self.credentials.api_key)
+
+    async def fetch_balance(self) -> BalanceSnapshot:
+        if not self.is_configured():
+            return self._unconfigured_snapshot()
+
+        client = await self.get_client()
+        headers = {
+            "Authorization": f"Bearer {self.credentials.api_key}",
+            "Accept": "application/json",
+        }
+
+        try:
+            # Try account-level consumption first
+            resp = await client.get(
+                f"{NEON_API_BASE}/consumption_history/account",
+                headers=headers,
+                timeout=15.0,
+            )
+
+            if resp.status_code == 401:
+                return self._error_snapshot(
+                    "Invalid Neon API key. Generate one at console.neon.tech/app/settings/api-keys."
+                )
+            if resp.status_code == 403:
+                return self._error_snapshot(
+                    "Forbidden — consumption history requires a paid Neon plan (Launch or above)."
+                )
+            if resp.status_code == 404:
+                # Fall back to just validating the key via projects list
+                return await self._fallback_projects(client, headers)
+
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Parse consumption data
+            periods = data.get("periods", [])
+            if not periods:
+                return self._make_snapshot(
+                    status="ok",
+                    raw_data={
+                        "note": "No consumption data for current period",
+                        "key_valid": True,
+                    },
+                )
+
+            # Use the most recent period
+            latest = periods[-1] if periods else {}
+            consumption = latest.get("consumption", {})
+
+            compute_seconds = consumption.get("compute_unit_seconds", 0)
+            storage_bytes = consumption.get("root_branch_bytes_month", 0)
+            data_transfer = consumption.get("public_network_transfer_bytes", 0)
+
+            # Convert compute seconds to compute hours for readability
+            compute_hours = round(compute_seconds / 3600, 2) if compute_seconds else 0
+            storage_gb = round(storage_bytes / (1024 ** 3), 3) if storage_bytes else 0
+            transfer_gb = round(data_transfer / (1024 ** 3), 3) if data_transfer else 0
+
+            return self._make_snapshot(
+                used_credits=compute_hours,  # compute hours as the primary metric
+                status="ok",
+                raw_data={
+                    "note": "Unit: compute hours (CU·h) this billing period",
+                    "compute_hours": compute_hours,
+                    "compute_seconds": compute_seconds,
+                    "storage_gb": storage_gb,
+                    "data_transfer_gb": transfer_gb,
+                    "period": latest.get("period_id"),
+                },
+            )
+
+        except httpx.TimeoutException:
+            return self._error_snapshot("Request timed out reaching Neon API.")
+        except httpx.HTTPStatusError as exc:
+            return self._error_snapshot(f"HTTP {exc.response.status_code}: {exc.response.text[:200]}")
+        except Exception as exc:
+            return self._error_snapshot(f"Unexpected error: {exc}")
+
+    async def _fallback_projects(
+        self, client: httpx.AsyncClient, headers: dict
+    ) -> BalanceSnapshot:
+        """Fallback: validate key via projects list if consumption endpoint unavailable."""
+        try:
+            resp = await client.get(
+                f"{NEON_API_BASE}/projects",
+                headers=headers,
+                params={"limit": 1},
+                timeout=10.0,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                project_count = len(data.get("projects", []))
+                return self._make_snapshot(
+                    status="ok",
+                    raw_data={
+                        "note": (
+                            "Consumption API unavailable for your plan. "
+                            "Key is valid — upgrade to Launch or above for usage metrics."
+                        ),
+                        "key_valid": True,
+                        "project_count": project_count,
+                    },
+                )
+            return self._error_snapshot(f"HTTP {resp.status_code}: {resp.text[:200]}")
+        except Exception as exc:
+            return self._error_snapshot(f"Fallback error: {exc}")

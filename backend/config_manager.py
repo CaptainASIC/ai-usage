@@ -143,4 +143,5 @@ def _load_credentials_from_env(provider_id: str) -> ProviderCredentials:
         session_cookie=os.getenv(f"{prefix}_SESSION_COOKIE"),
         org_id=os.getenv(f"{prefix}_ORG_ID"),
         team_id=os.getenv(f"{prefix}_TEAM_ID"),
+        api_secret=os.getenv(f"{prefix}_SECRET_ACCESS_KEY") or os.getenv(f"{prefix}_API_SECRET"),
     )

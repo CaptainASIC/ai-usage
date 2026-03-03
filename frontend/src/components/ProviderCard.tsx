@@ -1,12 +1,12 @@
 /**
- * ProviderCard - displays balance/usage for a single AI provider.
+ * ProviderCard - displays balance/usage for a single provider.
  *
  * Display priority:
  *   1. remaining_credits / balance_usd  → show as primary + % bar if total known
  *   2. thirty_day_spend_usd             → spend-only APIs (OpenAI admin)
  *   3. usage_monthly                    → unlimited keys (OpenRouter BYOK)
  *   4. used_credits                     → fallback usage
- *   5. unconfigured / error / disabled  → status states
+ *   5. error                            → error state
  */
 
 import { useState } from 'react';
@@ -14,7 +14,6 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
-  Settings,
   Clock,
   TrendingUp,
   Minus,
@@ -29,7 +28,6 @@ import { api } from '../utils/api';
 interface ProviderCardProps {
   snapshot: BalanceSnapshot;
   onRefreshed: (updated: BalanceSnapshot) => void;
-  onSettingsClick: () => void;
 }
 
 /** Gradient fallback colours per provider */
@@ -43,19 +41,14 @@ const PROVIDER_COLORS: Record<string, string> = {
   manus:      'from-lime-500 to-green-600',
   warp:       'from-fuchsia-500 to-violet-600',
   plaud:      'from-sky-500 to-blue-600',
-};
-
-/** Fallback text initials if logo fails to load */
-const PROVIDER_INITIALS: Record<string, string> = {
-  openrouter: 'OR',
-  openai:     'OAI',
-  anthropic:  'ANT',
-  xai:        'xAI',
-  mistral:    'MST',
-  groq:       'GRQ',
-  manus:      'MNS',
-  warp:       'WRP',
-  plaud:      'PLU',
+  gemini:     'from-blue-400 to-violet-500',
+  railway:    'from-purple-500 to-violet-600',
+  vercel:     'from-gray-400 to-gray-600',
+  mem0:       'from-teal-500 to-cyan-600',
+  neon:       'from-green-400 to-emerald-600',
+  runpod:     'from-yellow-500 to-orange-600',
+  aws:        'from-orange-400 to-yellow-500',
+  gcp:        'from-blue-400 to-red-400',
 };
 
 /** Map provider IDs to logo file paths in /public/logos/ */
@@ -69,6 +62,14 @@ const PROVIDER_LOGOS: Record<string, string> = {
   manus:      '/logos/manus.png',
   warp:       '/logos/warp.png',
   plaud:      '/logos/plaud.png',
+  gemini:     '/logos/gemini.png',
+  railway:    '/logos/railway.png',
+  vercel:     '/logos/vercel.png',
+  mem0:       '/logos/mem0.png',
+  neon:       '/logos/neon.png',
+  runpod:     '/logos/runpod.png',
+  aws:        '/logos/aws.png',
+  gcp:        '/logos/gcp.png',
 };
 
 /** Colour the balance value based on how much is left */
@@ -92,7 +93,6 @@ function ProviderLogo({ providerId, providerName }: { providerId: string; provid
   const [imgError, setImgError] = useState(false);
   const logoSrc = PROVIDER_LOGOS[providerId];
   const gradient = PROVIDER_COLORS[providerId] ?? 'from-gray-500 to-gray-600';
-  const initials = PROVIDER_INITIALS[providerId] ?? providerName.slice(0, 3).toUpperCase();
 
   if (logoSrc && !imgError) {
     return (
@@ -114,12 +114,12 @@ function ProviderLogo({ providerId, providerName }: { providerId: string; provid
       'text-white text-xs font-bold shadow-lg',
       gradient,
     )}>
-      {initials}
+      {providerName.slice(0, 2).toUpperCase()}
     </div>
   );
 }
 
-export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: ProviderCardProps) {
+export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -134,20 +134,18 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
     }
   };
 
-  const isOk           = snapshot.status === 'ok';
-  const isUnconfigured = snapshot.status === 'unconfigured';
-  const isError        = snapshot.status === 'error';
-  const isDisabled     = snapshot.status === 'disabled';
+  const isOk    = snapshot.status === 'ok';
+  const isError = snapshot.status === 'error';
 
   // ── derive display values ──────────────────────────────────────────────────
-  const remaining  = snapshot.remaining_credits ?? snapshot.balance_usd;
-  const total      = snapshot.total_credits;
-  const used       = snapshot.used_credits;
+  const remaining = snapshot.remaining_credits ?? snapshot.balance_usd;
+  const total     = snapshot.total_credits;
+  const used      = snapshot.used_credits;
 
   const raw = snapshot.raw_data ?? {};
-  const thirtyDaySpend  = typeof raw.thirty_day_spend_usd === 'number' ? raw.thirty_day_spend_usd : null;
-  const usageMonthly    = typeof raw.usage_monthly        === 'number' ? raw.usage_monthly        : null;
-  const noteText        = typeof raw.note                 === 'string' ? raw.note                 : null;
+  const thirtyDaySpend = typeof raw.thirty_day_spend_usd === 'number' ? raw.thirty_day_spend_usd : null;
+  const usageMonthly   = typeof raw.usage_monthly        === 'number' ? raw.usage_monthly        : null;
+  const noteText       = typeof raw.note                 === 'string' ? raw.note                 : null;
 
   // Usage percentage for the progress bar (0–1)
   let usagePct: number | null = null;
@@ -172,10 +170,8 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
       className={clsx(
         'relative rounded-2xl border p-5 flex flex-col gap-3 transition-all duration-200',
         'bg-gray-900/60 backdrop-blur-sm',
-        isOk           && 'border-gray-700/60 hover:border-gray-600/80 hover:bg-gray-900/80',
-        isUnconfigured && 'border-gray-800/60 opacity-75',
-        isError        && 'border-red-900/60',
-        isDisabled     && 'border-gray-800/40 opacity-50',
+        isOk    && 'border-gray-700/60 hover:border-gray-600/80 hover:bg-gray-900/80',
+        isError && 'border-red-900/60',
       )}
     >
       {/* ── Header ── */}
@@ -190,33 +186,23 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing || isDisabled}
-            className={clsx(
-              'p-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-gray-800',
-              'disabled:opacity-40 disabled:cursor-not-allowed',
-              refreshing && 'animate-spin text-blue-400',
-            )}
-            title="Refresh"
-          >
-            <RefreshCw size={14} />
-          </button>
-          <button
-            onClick={onSettingsClick}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-gray-800"
-            title="Configure"
-          >
-            <Settings size={14} />
-          </button>
-        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className={clsx(
+            'p-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-gray-800',
+            'disabled:opacity-40 disabled:cursor-not-allowed',
+            refreshing && 'animate-spin text-blue-400',
+          )}
+          title="Refresh"
+        >
+          <RefreshCw size={14} />
+        </button>
       </div>
 
       {/* ── Body ── */}
       <div className="flex-1 space-y-2">
 
-        {/* OK states */}
         {mode === 'balance' && remaining !== null && (
           <>
             <div>
@@ -273,14 +259,12 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
         )}
 
         {mode === 'used' && used !== null && (
-          <>
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Total Used</p>
-              <p className="text-2xl font-bold tabular-nums text-blue-400">
-                {formatUSD(used)}
-              </p>
-            </div>
-          </>
+          <div>
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Total Used</p>
+            <p className="text-2xl font-bold tabular-nums text-blue-400">
+              {formatUSD(used)}
+            </p>
+          </div>
         )}
 
         {mode === 'none' && isOk && (
@@ -312,27 +296,11 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
           <p className="text-xs text-gray-600 italic">{noteText}</p>
         )}
 
-        {/* Non-OK states */}
-        {isUnconfigured && (
-          <div className="flex items-start gap-2 text-gray-600">
-            <Minus size={14} className="mt-0.5 shrink-0" />
-            <p className="text-xs">
-              Not configured. Click <Settings size={10} className="inline" /> to add credentials.
-            </p>
-          </div>
-        )}
-
+        {/* Error state */}
         {isError && (
           <div className="flex items-start gap-2 text-red-500/80">
             <AlertCircle size={14} className="mt-0.5 shrink-0" />
             <p className="text-xs leading-relaxed">{snapshot.error_message}</p>
-          </div>
-        )}
-
-        {isDisabled && (
-          <div className="flex items-center gap-2 text-gray-600">
-            <Minus size={14} />
-            <p className="text-xs">Disabled</p>
           </div>
         )}
       </div>
@@ -350,11 +318,9 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
 
 function StatusBadge({ status }: { status: string }) {
   const config = {
-    ok:           { label: 'Live',         color: 'text-emerald-400 bg-emerald-400/10', icon: CheckCircle2 },
-    error:        { label: 'Error',        color: 'text-red-400 bg-red-400/10',         icon: AlertCircle  },
-    unconfigured: { label: 'Setup needed', color: 'text-gray-500 bg-gray-500/10',       icon: Settings     },
-    stale:        { label: 'Stale',        color: 'text-amber-400 bg-amber-400/10',     icon: Clock        },
-    disabled:     { label: 'Disabled',     color: 'text-gray-600 bg-gray-600/10',       icon: Minus        },
+    ok:    { label: 'Live',  color: 'text-emerald-400 bg-emerald-400/10', icon: CheckCircle2 },
+    error: { label: 'Error', color: 'text-red-400 bg-red-400/10',         icon: AlertCircle  },
+    stale: { label: 'Stale', color: 'text-amber-400 bg-amber-400/10',     icon: Clock        },
   }[status] ?? { label: status, color: 'text-gray-500 bg-gray-500/10', icon: Minus };
 
   const Icon = config.icon;

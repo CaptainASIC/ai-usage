@@ -3,7 +3,7 @@ name = "ai-credits-tracker"
 version = "1.0.0"
 description = "AI Credits Usage Tracker — Dashboard for monitoring cloud AI service balances"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "aiosqlite>=0.20.0",
     "apscheduler>=3.10.0",

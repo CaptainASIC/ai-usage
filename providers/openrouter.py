@@ -2,103 +2,63 @@
 OpenRouter provider - fetches credits via official endpoints.
 
 Endpoints:
-  GET https://openrouter.ai/api/v1/key      → key metadata (limit, usage)
-  GET https://openrouter.ai/api/v1/credits  → prepaid credit balance
+  GET https://openrouter.ai/api/v1/credits
+    → data.total_credits  (USD purchased)
+    → data.total_usage    (USD spent)
+    → remaining = total_credits - total_usage
+    Requires: Management key (same key used for API calls works)
 
-For prepaid accounts: /api/v1/credits returns total_granted and total_used,
-so remaining = total_granted - total_used.
-For unlimited/BYOK keys: limit is null; we show monthly usage instead.
+  GET https://openrouter.ai/api/v1/key
+    → data.limit, data.limit_remaining, data.usage, data.usage_monthly
+    Used as fallback / supplemental usage stats
+
+For unlimited/BYOK keys with no prepaid balance: total_credits will be 0
+or null; we fall back to showing monthly usage from the key endpoint.
 """
 
 import logging
 import httpx
 
-from models.schemas import BalanceSnapshot, ProviderCredentials
+from models.schemas import BalanceSnapshot
 from providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
-KEY_ENDPOINT = "https://openrouter.ai/api/v1/key"
 CREDITS_ENDPOINT = "https://openrouter.ai/api/v1/credits"
+KEY_ENDPOINT     = "https://openrouter.ai/api/v1/key"
 
 
 class OpenRouterProvider(BaseProvider):
     """OpenRouter credit balance provider."""
 
-    provider_id = "openrouter"
+    provider_id   = "openrouter"
     provider_name = "OpenRouter"
-    auth_type = "api_key"
+    auth_type     = "api_key"
 
     def is_configured(self) -> bool:
         return bool(self.credentials.api_key)
 
     async def fetch_balance(self) -> BalanceSnapshot:
-        """Fetch balance from OpenRouter key + credits endpoints."""
+        """Fetch balance from OpenRouter credits + key endpoints."""
         if not self.is_configured():
             return self._unconfigured_snapshot()
 
-        client = await self.get_client()
+        client  = await self.get_client()
         headers = {"Authorization": f"Bearer {self.credentials.api_key}"}
 
+        # ── 1. Fetch account credit balance ───────────────────────────────
+        total_purchased: float | None = None
+        total_usage_credits: float | None = None
+        remaining_credits: float | None = None
+
         try:
-            # Fetch key metadata
-            key_resp = await client.get(KEY_ENDPOINT, headers=headers)
-            key_resp.raise_for_status()
-            key_data = key_resp.json().get("data", {})
-
-            limit = key_data.get("limit")          # None = unlimited
-            limit_remaining = key_data.get("limit_remaining")
-            usage = key_data.get("usage", 0.0)
-            usage_monthly = key_data.get("usage_monthly", 0.0)
-            is_free_tier = key_data.get("is_free_tier", False)
-
-            # Fetch prepaid credit balance
-            total_granted: float | None = None
-            total_used_credits: float | None = None
-            remaining_credits: float | None = None
-
-            try:
-                credits_resp = await client.get(CREDITS_ENDPOINT, headers=headers)
-                credits_resp.raise_for_status()
-                credits_data = credits_resp.json().get("data", {})
-                total_granted = credits_data.get("total_granted")
-                total_used_credits = credits_data.get("total_used")
-                if total_granted is not None and total_used_credits is not None:
-                    remaining_credits = round(total_granted - total_used_credits, 4)
-            except Exception:
-                # Credits endpoint may not be available for all key types
-                pass
-
-            # Determine best values to surface
-            # Priority: prepaid remaining > key limit_remaining > None
-            best_remaining = remaining_credits if remaining_credits is not None else limit_remaining
-            best_total = total_granted if total_granted is not None else limit
-            best_used = total_used_credits if total_used_credits is not None else usage
-
-            raw: dict = {
-                "label": key_data.get("label"),
-                "limit": limit,
-                "limit_remaining": limit_remaining,
-                "usage": usage,
-                "usage_daily": key_data.get("usage_daily"),
-                "usage_weekly": key_data.get("usage_weekly"),
-                "usage_monthly": usage_monthly,
-                "is_free_tier": is_free_tier,
-            }
-            if total_granted is not None:
-                raw["total_granted"] = total_granted
-                raw["total_used_credits"] = total_used_credits
-            if best_remaining is None:
-                raw["note"] = "Unlimited key — showing monthly usage"
-
-            return self._make_snapshot(
-                balance_usd=best_remaining,
-                total_credits=best_total,
-                used_credits=best_used,
-                remaining_credits=best_remaining,
-                raw_data=raw,
-            )
-
+            cr = await client.get(CREDITS_ENDPOINT, headers=headers)
+            cr.raise_for_status()
+            cd = cr.json().get("data", {})
+            total_purchased     = cd.get("total_credits")   # USD bought
+            total_usage_credits = cd.get("total_usage")     # USD spent
+            if total_purchased is not None and total_usage_credits is not None:
+                remaining_credits = round(total_purchased - total_usage_credits, 6)
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 return self._error_snapshot("Invalid API key")
@@ -107,3 +67,46 @@ class OpenRouterProvider(BaseProvider):
             return self._error_snapshot(f"Network error: {str(e)}")
         except Exception as e:
             return self._error_snapshot(f"Unexpected error: {str(e)}")
+
+        # ── 2. Fetch key-level usage stats (best-effort) ──────────────────
+        usage_monthly: float = 0.0
+        usage_total:   float = 0.0
+        key_label:     str | None = None
+        key_limit:     float | None = None
+
+        try:
+            kr = await client.get(KEY_ENDPOINT, headers=headers)
+            kr.raise_for_status()
+            kd = kr.json().get("data", {})
+            usage_monthly = kd.get("usage_monthly", 0.0)
+            usage_total   = kd.get("usage", 0.0)
+            key_label     = kd.get("label")
+            key_limit     = kd.get("limit")
+        except Exception:
+            pass  # key endpoint is supplemental; don't fail on it
+
+        # ── 3. Decide what to surface ─────────────────────────────────────
+        # If the account has a prepaid balance, show remaining.
+        # If total_purchased is 0 / null (BYOK / unlimited), fall back to
+        # monthly usage from the key endpoint.
+        has_prepaid = total_purchased is not None and total_purchased > 0
+
+        raw: dict = {
+            "label":         key_label,
+            "total_credits": total_purchased,
+            "total_usage":   total_usage_credits,
+            "usage_monthly": usage_monthly,
+            "usage":         usage_total,
+            "key_limit":     key_limit,
+        }
+
+        if not has_prepaid:
+            raw["note"] = "Unlimited/BYOK key — showing monthly usage"
+
+        return self._make_snapshot(
+            balance_usd       = remaining_credits if has_prepaid else None,
+            total_credits     = total_purchased   if has_prepaid else None,
+            used_credits      = total_usage_credits if has_prepaid else usage_total,
+            remaining_credits = remaining_credits if has_prepaid else None,
+            raw_data          = raw,
+        )

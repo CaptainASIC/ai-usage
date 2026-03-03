@@ -40,7 +40,7 @@ export default function App() {
       />
 
       {/* Main content */}
-      <main className="flex-1 px-4 sm:px-6 py-6 max-w-7xl mx-auto w-full">
+      <main className="flex-1 px-4 sm:px-6 py-6 w-full">
         {/* Error banner */}
         {error && (
           <div className="mb-4 p-3 bg-red-950/40 border border-red-800/40 rounded-xl text-sm text-red-300">
@@ -50,7 +50,7 @@ export default function App() {
 
         {/* Loading skeleton */}
         {loading && !data && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
@@ -73,7 +73,7 @@ export default function App() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
               {data.providers.map((snapshot) => (
                 <ProviderCard
                   key={snapshot.provider_id}

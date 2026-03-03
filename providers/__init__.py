@@ -10,6 +10,7 @@ from providers.mistral import MistralProvider
 from providers.groq import GroqProvider
 from providers.manus import ManusProvider
 from providers.warp import WarpProvider
+from providers.plaud import PlaudProvider
 
 # Registry: provider_id -> (ProviderClass, default_config)
 PROVIDER_REGISTRY = {
@@ -86,6 +87,15 @@ PROVIDER_REGISTRY = {
         "tier": 2,
         "refresh_interval": 1800,
     },
+    "plaud": {
+        "class": PlaudProvider,
+        "name": "Plaud",
+        "auth_type": "jwt_token",
+        "auth_fields": ["jwt_token"],
+        "auth_help": "Open web.plaud.ai → DevTools Console → run: localStorage.getItem('tokenstr')",
+        "tier": 2,
+        "refresh_interval": 3600,
+    },
 }
 
 __all__ = [
@@ -98,4 +108,5 @@ __all__ = [
     "GroqProvider",
     "ManusProvider",
     "WarpProvider",
+    "PlaudProvider",
 ]

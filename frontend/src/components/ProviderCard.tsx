@@ -32,6 +32,7 @@ interface ProviderCardProps {
   onSettingsClick: () => void;
 }
 
+/** Gradient fallback colours per provider */
 const PROVIDER_COLORS: Record<string, string> = {
   openrouter: 'from-violet-500 to-purple-600',
   openai:     'from-emerald-500 to-teal-600',
@@ -41,8 +42,10 @@ const PROVIDER_COLORS: Record<string, string> = {
   groq:       'from-cyan-500 to-sky-600',
   manus:      'from-lime-500 to-green-600',
   warp:       'from-fuchsia-500 to-violet-600',
+  plaud:      'from-sky-500 to-blue-600',
 };
 
+/** Fallback text initials if logo fails to load */
 const PROVIDER_INITIALS: Record<string, string> = {
   openrouter: 'OR',
   openai:     'OAI',
@@ -52,6 +55,20 @@ const PROVIDER_INITIALS: Record<string, string> = {
   groq:       'GRQ',
   manus:      'MNS',
   warp:       'WRP',
+  plaud:      'PLU',
+};
+
+/** Map provider IDs to logo file paths in /public/logos/ */
+const PROVIDER_LOGOS: Record<string, string> = {
+  openrouter: '/logos/openrouter.png',
+  openai:     '/logos/openai.svg',
+  anthropic:  '/logos/anthropic.png',
+  xai:        '/logos/xai.png',
+  mistral:    '/logos/mistral.png',
+  groq:       '/logos/groq.png',
+  manus:      '/logos/manus.png',
+  warp:       '/logos/warp.png',
+  plaud:      '/logos/plaud.png',
 };
 
 /** Colour the balance value based on how much is left */
@@ -68,6 +85,38 @@ function barColor(pct: number): string {
   if (pct > 0.4) return 'bg-emerald-500';
   if (pct > 0.15) return 'bg-amber-500';
   return 'bg-red-500';
+}
+
+/** Provider logo with graceful fallback to gradient initials */
+function ProviderLogo({ providerId, providerName }: { providerId: string; providerName: string }) {
+  const [imgError, setImgError] = useState(false);
+  const logoSrc = PROVIDER_LOGOS[providerId];
+  const gradient = PROVIDER_COLORS[providerId] ?? 'from-gray-500 to-gray-600';
+  const initials = PROVIDER_INITIALS[providerId] ?? providerName.slice(0, 3).toUpperCase();
+
+  if (logoSrc && !imgError) {
+    return (
+      <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shadow-lg overflow-hidden p-1.5">
+        <img
+          src={logoSrc}
+          alt={`${providerName} logo`}
+          className="w-full h-full object-contain"
+          onError={() => setImgError(true)}
+        />
+      </div>
+    );
+  }
+
+  // Fallback: gradient with initials
+  return (
+    <div className={clsx(
+      'w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center',
+      'text-white text-xs font-bold shadow-lg',
+      gradient,
+    )}>
+      {initials}
+    </div>
+  );
 }
 
 export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: ProviderCardProps) {
@@ -89,9 +138,6 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
   const isUnconfigured = snapshot.status === 'unconfigured';
   const isError        = snapshot.status === 'error';
   const isDisabled     = snapshot.status === 'disabled';
-
-  const gradient = PROVIDER_COLORS[snapshot.provider_id] ?? 'from-gray-500 to-gray-600';
-  const initials  = PROVIDER_INITIALS[snapshot.provider_id] ?? snapshot.provider_name.slice(0, 3).toUpperCase();
 
   // ── derive display values ──────────────────────────────────────────────────
   const remaining  = snapshot.remaining_credits ?? snapshot.balance_usd;
@@ -135,13 +181,7 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className={clsx(
-            'w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center',
-            'text-white text-xs font-bold shadow-lg',
-            gradient,
-          )}>
-            {initials}
-          </div>
+          <ProviderLogo providerId={snapshot.provider_id} providerName={snapshot.provider_name} />
           <div>
             <h3 className="font-semibold text-gray-100 text-sm leading-tight">
               {snapshot.provider_name}

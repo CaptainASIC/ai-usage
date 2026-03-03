@@ -1,9 +1,13 @@
 """
-OpenRouter provider - fetches credits via the official /api/v1/key endpoint.
+OpenRouter provider - fetches credits via official endpoints.
 
-Endpoint: GET https://openrouter.ai/api/v1/key
-Auth: Standard API key as Bearer token
-Response includes: limit, limit_remaining, usage, usage_daily, usage_monthly
+Endpoints:
+  GET https://openrouter.ai/api/v1/key      → key metadata (limit, usage)
+  GET https://openrouter.ai/api/v1/credits  → prepaid credit balance
+
+For prepaid accounts: /api/v1/credits returns total_granted and total_used,
+so remaining = total_granted - total_used.
+For unlimited/BYOK keys: limit is null; we show monthly usage instead.
 """
 
 import logging
@@ -29,7 +33,7 @@ class OpenRouterProvider(BaseProvider):
         return bool(self.credentials.api_key)
 
     async def fetch_balance(self) -> BalanceSnapshot:
-        """Fetch balance from OpenRouter /api/v1/key endpoint."""
+        """Fetch balance from OpenRouter key + credits endpoints."""
         if not self.is_configured():
             return self._unconfigured_snapshot()
 
@@ -37,20 +41,39 @@ class OpenRouterProvider(BaseProvider):
         headers = {"Authorization": f"Bearer {self.credentials.api_key}"}
 
         try:
-            response = await client.get(KEY_ENDPOINT, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            key_data = data.get("data", {})
+            # Fetch key metadata
+            key_resp = await client.get(KEY_ENDPOINT, headers=headers)
+            key_resp.raise_for_status()
+            key_data = key_resp.json().get("data", {})
 
-            limit = key_data.get("limit")  # None = unlimited
-            limit_remaining = key_data.get("limit_remaining")  # None = unlimited
+            limit = key_data.get("limit")          # None = unlimited
+            limit_remaining = key_data.get("limit_remaining")
             usage = key_data.get("usage", 0.0)
             usage_monthly = key_data.get("usage_monthly", 0.0)
+            is_free_tier = key_data.get("is_free_tier", False)
 
-            # If limit_remaining is None, the key has no credit cap (unlimited/BYOK)
-            # In that case surface monthly usage as the primary metric
-            remaining = limit_remaining if limit_remaining is not None else None
-            note = "Unlimited key — showing usage" if limit is None else None
+            # Fetch prepaid credit balance
+            total_granted: float | None = None
+            total_used_credits: float | None = None
+            remaining_credits: float | None = None
+
+            try:
+                credits_resp = await client.get(CREDITS_ENDPOINT, headers=headers)
+                credits_resp.raise_for_status()
+                credits_data = credits_resp.json().get("data", {})
+                total_granted = credits_data.get("total_granted")
+                total_used_credits = credits_data.get("total_used")
+                if total_granted is not None and total_used_credits is not None:
+                    remaining_credits = round(total_granted - total_used_credits, 4)
+            except Exception:
+                # Credits endpoint may not be available for all key types
+                pass
+
+            # Determine best values to surface
+            # Priority: prepaid remaining > key limit_remaining > None
+            best_remaining = remaining_credits if remaining_credits is not None else limit_remaining
+            best_total = total_granted if total_granted is not None else limit
+            best_used = total_used_credits if total_used_credits is not None else usage
 
             raw: dict = {
                 "label": key_data.get("label"),
@@ -60,16 +83,19 @@ class OpenRouterProvider(BaseProvider):
                 "usage_daily": key_data.get("usage_daily"),
                 "usage_weekly": key_data.get("usage_weekly"),
                 "usage_monthly": usage_monthly,
-                "is_free_tier": key_data.get("is_free_tier"),
+                "is_free_tier": is_free_tier,
             }
-            if note:
-                raw["note"] = note
+            if total_granted is not None:
+                raw["total_granted"] = total_granted
+                raw["total_used_credits"] = total_used_credits
+            if best_remaining is None:
+                raw["note"] = "Unlimited key — showing monthly usage"
 
             return self._make_snapshot(
-                balance_usd=remaining,
-                total_credits=limit,
-                used_credits=usage,
-                remaining_credits=remaining,
+                balance_usd=best_remaining,
+                total_credits=best_total,
+                used_credits=best_used,
+                remaining_credits=best_remaining,
                 raw_data=raw,
             )
 

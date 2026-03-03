@@ -42,26 +42,38 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow the frontend service URL plus local dev origins.
-# Set FRONTEND_URL in Railway Variables to your frontend service domain.
-_frontend_url = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
-_cors_origins = [
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "http://localhost:4173",
-]
-if _frontend_url:
-    _cors_origins.append(_frontend_url)
-    # Also allow with and without trailing slash
-    if _frontend_url.startswith("https://"):
-        _cors_origins.append(_frontend_url.replace("https://", "http://"))
+# CORS — personal dashboard, allow all origins by default.
+# Optionally restrict by setting FRONTEND_URL or ALLOWED_ORIGINS in Railway Variables
+# (comma-separated list of origins, e.g. "https://usage.captainasic.dev").
+_allowed_origins_env = (
+    os.getenv("ALLOWED_ORIGINS", "")
+    or os.getenv("FRONTEND_URL", "")
+).strip()
 
-logger.info(f"CORS origins: {_cors_origins}")
+if _allowed_origins_env:
+    # Parse comma-separated list and add localhost dev origins
+    _cors_origins = [
+        o.strip().rstrip("/")
+        for o in _allowed_origins_env.split(",")
+        if o.strip()
+    ]
+    _cors_origins += [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:4173",
+    ]
+    _use_wildcard = False
+else:
+    # No restriction set — allow all origins (safe for personal dashboards)
+    _cors_origins = ["*"]
+    _use_wildcard = True
+
+logger.info(f"CORS mode: {'wildcard' if _use_wildcard else 'restricted'}, origins: {_cors_origins}")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_credentials=True,
+    allow_credentials=not _use_wildcard,  # credentials=True incompatible with wildcard
     allow_methods=["*"],
     allow_headers=["*"],
 )

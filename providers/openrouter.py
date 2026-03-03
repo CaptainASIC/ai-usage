@@ -47,24 +47,30 @@ class OpenRouterProvider(BaseProvider):
             usage = key_data.get("usage", 0.0)
             usage_monthly = key_data.get("usage_monthly", 0.0)
 
-            # If limit_remaining is None, the key has no credit cap (unlimited or BYOK)
+            # If limit_remaining is None, the key has no credit cap (unlimited/BYOK)
+            # In that case surface monthly usage as the primary metric
             remaining = limit_remaining if limit_remaining is not None else None
+            note = "Unlimited key — showing usage" if limit is None else None
+
+            raw: dict = {
+                "label": key_data.get("label"),
+                "limit": limit,
+                "limit_remaining": limit_remaining,
+                "usage": usage,
+                "usage_daily": key_data.get("usage_daily"),
+                "usage_weekly": key_data.get("usage_weekly"),
+                "usage_monthly": usage_monthly,
+                "is_free_tier": key_data.get("is_free_tier"),
+            }
+            if note:
+                raw["note"] = note
 
             return self._make_snapshot(
                 balance_usd=remaining,
                 total_credits=limit,
                 used_credits=usage,
                 remaining_credits=remaining,
-                raw_data={
-                    "label": key_data.get("label"),
-                    "limit": limit,
-                    "limit_remaining": limit_remaining,
-                    "usage": usage,
-                    "usage_daily": key_data.get("usage_daily"),
-                    "usage_weekly": key_data.get("usage_weekly"),
-                    "usage_monthly": usage_monthly,
-                    "is_free_tier": key_data.get("is_free_tier"),
-                },
+                raw_data=raw,
             )
 
         except httpx.HTTPStatusError as e:

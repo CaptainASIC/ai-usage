@@ -1,5 +1,12 @@
 /**
  * ProviderCard - displays balance information for a single AI provider.
+ *
+ * Status matrix:
+ *   ok + balance/remaining  → show balance in green/amber/red
+ *   ok + null balance       → show usage/spend data (usage-only key or spend-only API)
+ *   unconfigured            → prompt to configure
+ *   error                   → show error message
+ *   disabled                → dimmed disabled state
  */
 
 import { useState } from 'react';
@@ -11,6 +18,7 @@ import {
   Clock,
   TrendingUp,
   Minus,
+  Activity,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { BalanceSnapshot } from '../types';
@@ -23,7 +31,6 @@ interface ProviderCardProps {
   onSettingsClick: () => void;
 }
 
-// Provider logo/icon colors
 const PROVIDER_COLORS: Record<string, string> = {
   openrouter: 'from-violet-500 to-purple-600',
   openai: 'from-emerald-500 to-teal-600',
@@ -69,9 +76,15 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
   const gradient = PROVIDER_COLORS[snapshot.provider_id] || 'from-gray-500 to-gray-600';
   const initials = PROVIDER_INITIALS[snapshot.provider_id] || snapshot.provider_name.slice(0, 3).toUpperCase();
 
-  // Determine the primary display value
+  // Primary balance value — prefer remaining_credits, then balance_usd
   const primaryValue = snapshot.remaining_credits ?? snapshot.balance_usd;
   const usedValue = snapshot.used_credits;
+
+  // For ok-but-no-balance providers: extract spend/usage from raw_data
+  const thirtyDaySpend = snapshot.raw_data?.thirty_day_spend_usd as number | undefined;
+  const usageMonthly = snapshot.raw_data?.usage_monthly as number | undefined;
+  const usageTotal = snapshot.raw_data?.usage as number | undefined;
+  const hasUsageData = usedValue !== null || thirtyDaySpend !== undefined || usageMonthly !== undefined || usageTotal !== undefined;
 
   return (
     <div
@@ -87,7 +100,6 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* Provider avatar */}
           <div
             className={clsx(
               'w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center',
@@ -129,9 +141,10 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
         </div>
       </div>
 
-      {/* Balance display */}
+      {/* Balance / data display */}
       <div className="flex-1">
-        {isOk && primaryValue !== null ? (
+        {isOk && primaryValue !== null && primaryValue !== undefined ? (
+          /* Has a real balance/remaining value */
           <div className="space-y-2">
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
@@ -145,19 +158,63 @@ export function ProviderCard({ snapshot, onRefreshed, onSettingsClick }: Provide
                 {formatUSD(primaryValue)}
               </p>
             </div>
-
-            {usedValue !== null && (
+            {usedValue !== null && usedValue !== undefined && (
               <div className="flex items-center gap-1.5 text-xs text-gray-500">
                 <TrendingUp size={11} />
                 <span>{formatUSD(usedValue)} used</span>
               </div>
             )}
-
             {snapshot.raw_data?.note !== undefined && (
               <p className="text-xs text-gray-600 italic">
                 {String(snapshot.raw_data.note)}
               </p>
             )}
+          </div>
+        ) : isOk && hasUsageData ? (
+          /* Ok but no balance — show usage/spend data */
+          <div className="space-y-2">
+            {thirtyDaySpend !== undefined && (
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">30-day Spend</p>
+                <p className="text-2xl font-bold tabular-nums text-blue-400">
+                  {formatUSD(thirtyDaySpend)}
+                </p>
+              </div>
+            )}
+            {usageMonthly !== undefined && (
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Monthly Usage</p>
+                <p className="text-2xl font-bold tabular-nums text-blue-400">
+                  {formatUSD(usageMonthly / 1000000)}
+                </p>
+              </div>
+            )}
+            {usedValue !== null && usedValue !== undefined && usedValue > 0 && thirtyDaySpend === undefined && (
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Used</p>
+                <p className="text-2xl font-bold tabular-nums text-blue-400">
+                  {formatUSD(usedValue)}
+                </p>
+              </div>
+            )}
+            {usageTotal !== undefined && (
+              <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                <Activity size={11} />
+                <span>{formatUSD(usageTotal / 1000000)} lifetime usage</span>
+              </div>
+            )}
+            {snapshot.raw_data?.note !== undefined && (
+              <p className="text-xs text-gray-600 italic">
+                {String(snapshot.raw_data.note)}
+              </p>
+            )}
+          </div>
+        ) : isOk ? (
+          /* Ok but truly no data at all */
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">Balance</p>
+            <p className="text-2xl font-bold tabular-nums text-gray-500">—</p>
+            <p className="text-xs text-gray-600">No balance data available for this key type.</p>
           </div>
         ) : isUnconfigured ? (
           <div className="flex items-start gap-2 text-gray-600">

@@ -44,7 +44,7 @@ app = FastAPI(
 
 # CORS — personal dashboard, allow all origins by default.
 # Optionally restrict by setting FRONTEND_URL or ALLOWED_ORIGINS in Railway Variables
-# (comma-separated list of origins, e.g. "https://usage.captainasic.dev").
+# (comma-separated list of origins, e.g. "https://reckoner.captainasic.dev").
 _allowed_origins_env = (
     os.getenv("ALLOWED_ORIGINS", "")
     or os.getenv("FRONTEND_URL", "")

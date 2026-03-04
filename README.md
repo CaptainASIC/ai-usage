@@ -32,8 +32,8 @@ A fast, single-page dashboard for monitoring your cloud AI service credits and b
 
 ```bash
 # Clone the repo
-git clone https://github.com/CaptainASIC/ai-usage
-cd ai-usage
+git clone https://github.com/CaptainASIC/reckoner
+cd reckoner
 
 # Backend
 cd backend

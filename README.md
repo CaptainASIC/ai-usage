@@ -1,28 +1,38 @@
 # Reckoner
 
-A fast, single-page dashboard for monitoring your cloud AI service credits and balances across OpenRouter, OpenAI, Anthropic, xAI (Grok), Mistral, Groq, Manus, Warp, and more.
+A fast, single-page dashboard for monitoring AI service credits, cloud billing, and account balances across OpenRouter, OpenAI, Anthropic, xAI, Mistral, Groq, Manus, Plaud, Railway, Neon, RunPod, mem0, AWS, GCP, Vercel, and more.
+
+Live at [reckoner.captainasic.dev](https://reckoner.captainasic.dev)
 
 ## Features
 
-- **Single dashboard** — all your AI provider balances at a glance
+- **Single dashboard** — all your AI and cloud provider balances at a glance
 - **Auto-refresh** — balances update every 60 seconds in the browser, with background polling every 5–30 minutes
 - **Live refresh** — force an immediate refresh of any provider or all at once
 - **In-app settings** — configure credentials directly from the dashboard UI
-- **Railway-ready** — deploys as a single service with `uv` and Nixpacks
+- **Railway-ready** — two-service deploy (frontend + backend) with `uv` and Railpack
 - **Docker support** — multi-stage Dockerfile included
 
 ## Provider Support
 
-| Provider | Method | Auth Required | Notes |
-|----------|--------|---------------|-------|
-| **OpenRouter** | Official API | API Key | Full balance + usage data |
-| **OpenAI** | Admin API | Admin Key | 30-day spend (no balance endpoint) |
-| **Anthropic** | Undocumented console API | Session Cookie + Org ID | Prepaid credit balance |
-| **xAI (Grok)** | Official Management API | Management Key + Team ID | Prepaid credit balance |
-| **Mistral AI** | Session scraping | Session Cookie | Best-effort |
-| **Groq** | Session scraping | Session Cookie | Best-effort |
-| **Manus** | Session scraping | Session Cookie / API Key | Best-effort |
-| **Warp** | Session scraping | Session Cookie | Best-effort |
+| Provider | Category | Auth Required | What It Shows |
+|----------|----------|---------------|---------------|
+| **OpenRouter** | AI | API Key | Prepaid credit balance |
+| **OpenAI** | AI | API Key + Admin Key (optional) | Key validity; 30-day spend with Admin key |
+| **Anthropic** | AI | Session Cookie + Org ID | Prepaid credit balance |
+| **xAI (Grok)** | AI | Management Key + Team ID | Prepaid credit balance |
+| **Mistral AI** | AI | Session Cookie | Best-effort balance |
+| **Groq** | AI | Session Cookie | Best-effort balance |
+| **Manus** | AI | JWT Bearer Token | Monthly credits, daily refresh, add-on balance |
+| **Gemini** | AI | API Key | Key validity only (no balance endpoint) |
+| **Plaud** | AI/Tools | JWT Bearer Token | Recording stats (files, hours, transcription) |
+| **Railway** | Cloud | Account API Token | Credit balance + current billing period spend |
+| **Vercel** | Cloud | Personal Access Token | Account details |
+| **Neon DB** | Cloud | API Key | Monthly compute consumption |
+| **RunPod** | Cloud | API Key | Credit balance |
+| **mem0** | Tools | API Key | Key validity + memory count |
+| **AWS** | Cloud | IAM Key + Secret | Month-to-date spend via Cost Explorer |
+| **GCP** | Cloud | Service Account JSON | Month-to-date billing spend |
 
 ## Quick Start
 
@@ -45,18 +55,21 @@ uv run uvicorn main:app --reload --port 8000
 # Frontend (separate terminal)
 cd frontend
 pnpm install
-pnpm dev
+VITE_API_URL=http://localhost:8000 pnpm dev
 ```
 
 Open http://localhost:5173 for the dashboard.
 
 ### Deploy to Railway
 
-1. Push this repo to GitHub
+1. Fork or push this repo to GitHub
 2. Create a new Railway project → **Deploy from GitHub repo**
-3. Railway will auto-detect `railway.toml` and build with Nixpacks
-4. Add environment variables in Railway's **Variables** tab (see `.env.example`)
-5. Done — Railway provides a public URL
+3. Add two services, both pointing to the same repo:
+   - **Backend** — root directory: `/backend`
+   - **Frontend** — root directory: `/frontend`
+4. Add environment variables in each service's **Variables** tab (see `.env.example`)
+5. Set `VITE_API_URL` in the frontend service to the backend's public URL
+6. Done — Railway provides public URLs for both services
 
 ### Deploy with Docker
 
@@ -83,18 +96,16 @@ Click the ⚙️ icon on any provider card to configure credentials directly in 
 3. Set `OPENROUTER_API_KEY`
 
 ### OpenAI
-1. Go to [platform.openai.com/settings/organization/admin-keys](https://platform.openai.com/settings/organization/admin-keys)
-2. Create an Admin key (`sk-admin-...`)
-3. Set `OPENAI_ADMIN_KEY`
-> Note: OpenAI has no direct balance endpoint. The dashboard shows your 30-day spend.
+1. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys) for a standard key
+2. Optionally, go to [platform.openai.com/settings/organization/admin-keys](https://platform.openai.com/settings/organization/admin-keys) for an Admin key
+3. Set `OPENAI_API_KEY` and optionally `OPENAI_ADMIN_KEY`
 
 ### Anthropic
 1. Log in to [platform.claude.com](https://platform.claude.com)
 2. Open DevTools (F12) → Network tab
 3. Find a request to `/api/organizations/<org-id>/prepaid/credits`
-4. Copy the `org_id` from the URL
-5. Copy the `sessionKey` value from the Cookie header
-6. Set `ANTHROPIC_ORG_ID` and `ANTHROPIC_SESSION_COOKIE`
+4. Copy the `org_id` from the URL and the `sessionKey` from the Cookie header
+5. Set `ANTHROPIC_ORG_ID` and `ANTHROPIC_SESSION_COOKIE`
 
 ### xAI (Grok)
 1. Log in to [console.x.ai](https://console.x.ai)
@@ -102,37 +113,78 @@ Click the ⚙️ icon on any provider card to configure credentials directly in 
 3. Find your Team ID in the console URL or account settings
 4. Set `XAI_MANAGEMENT_KEY` and `XAI_TEAM_ID`
 
-### Tier 2 Providers (Mistral, Groq, Manus, Warp)
-1. Log in to the respective console
-2. Open DevTools (F12) → Application → Cookies (or Network → Headers)
-3. Copy the full cookie string
-4. Set the corresponding `*_SESSION_COOKIE` variable
+### Manus
+1. Log in to [manus.im](https://manus.im)
+2. Open DevTools (F12) → Network tab → filter by `api.manus.im`
+3. Click any request → Headers → copy the value after `Bearer ` in the Authorization header
+4. Set `MANUS_API_KEY` — token is valid for ~90 days
+
+### Plaud
+1. Log in to [web.plaud.ai](https://web.plaud.ai)
+2. Open DevTools (F12) → Network tab → filter by `api.plaud.ai`
+3. Click any request → Headers → copy the value after `Bearer ` in the Authorization header
+4. Set `PLAUD_API_KEY` — token is valid for ~5 months
+
+### Railway
+1. Go to [railway.app/account/tokens](https://railway.app/account/tokens)
+2. Create a new token — **select "No workspace"** to create an Account token
+3. Set `RAILWAY_CREDIT_TOKEN` (not `RAILWAY_API_KEY` — Railway injects that automatically)
+
+### Neon DB
+1. Go to [console.neon.tech/app/settings/api-keys](https://console.neon.tech/app/settings/api-keys)
+2. Create an API key
+3. Set `NEON_API_KEY`
+> Note: Consumption API requires Launch plan or above.
+
+### RunPod
+1. Go to [runpod.io/console/user/settings](https://runpod.io/console/user/settings) → API Keys
+2. Create an API key
+3. Set `RUNPOD_API_KEY`
+
+### mem0
+1. Go to [app.mem0.ai/dashboard/api-keys](https://app.mem0.ai/dashboard/api-keys)
+2. Create an API key (`m0-...`)
+3. Set `MEM0_API_KEY`
+
+### AWS
+1. Create an IAM user with `ce:GetCostAndUsage` permission
+2. Generate access keys
+3. Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_DEFAULT_REGION`
+
+### GCP
+1. Create a service account with `roles/billing.viewer`
+2. Download the JSON key file
+3. Set `GCP_SERVICE_ACCOUNT_JSON` (full JSON contents) and `GCP_BILLING_ACCOUNT_ID`
 
 ## Architecture
 
 ```
 reckoner/
 ├── backend/                  # FastAPI application
-│   ├── main.py               # App entry point, serves frontend
+│   ├── main.py               # App entry point
 │   ├── scheduler.py          # Background balance refresh
 │   ├── config_manager.py     # Settings persistence
 │   ├── models/
 │   │   ├── database.py       # SQLite schema + connection
 │   │   └── schemas.py        # Pydantic v2 models
-│   ├── providers/            # One file per AI service
-│   │   ├── base.py           # Abstract base class
-│   │   ├── openrouter.py
-│   │   ├── openai.py
-│   │   ├── anthropic.py
-│   │   ├── xai.py
-│   │   ├── mistral.py
-│   │   ├── groq.py
-│   │   ├── manus.py
-│   │   └── warp.py
-│   └── routers/
-│       ├── credits.py        # Balance endpoints
-│       ├── settings.py       # Config endpoints
-│       └── health.py         # Health check
+│   └── providers/            # One file per service
+│       ├── base.py           # Abstract base class
+│       ├── openrouter.py
+│       ├── openai.py
+│       ├── anthropic.py
+│       ├── xai.py
+│       ├── mistral.py
+│       ├── groq.py
+│       ├── manus.py
+│       ├── plaud.py
+│       ├── gemini.py
+│       ├── railway.py
+│       ├── vercel.py
+│       ├── neon.py
+│       ├── runpod.py
+│       ├── mem0.py
+│       ├── aws.py
+│       └── gcp.py
 ├── frontend/                 # React + TypeScript + Tailwind
 │   └── src/
 │       ├── App.tsx
@@ -147,10 +199,8 @@ reckoner/
 │       └── utils/
 │           ├── api.ts
 │           └── format.ts
-├── railway.toml              # Railway deployment config
-├── nixpacks.toml             # Nixpacks build config
-├── Dockerfile                # Docker deployment
-└── .env.example              # Environment variable template
+├── .env.example              # Environment variable template
+└── README.md
 ```
 
 ## API Reference

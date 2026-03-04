@@ -246,7 +246,6 @@ class ManusProvider(BaseProvider):
             remaining_credits=remaining_usd,
             used_credits=used_usd,
             total_credits=None,
-            usage_percentage=usage_pct,
             status="ok",
             raw_data=raw,
         )

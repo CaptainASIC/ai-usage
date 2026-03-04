@@ -133,15 +133,35 @@ async def get_latest_snapshots() -> list[dict]:
             return [dict(row) async for row in cursor]
 
 
+# Railway injects its own env vars (RAILWAY_API_KEY, RAILWAY_TOKEN, RAILWAY_SERVICE_ID, etc.)
+# into every service. We use a custom prefix to avoid collisions.
+_PROVIDER_ENV_OVERRIDES: dict[str, dict[str, str]] = {
+    "railway": {
+        # Use RAILWAY_CREDIT_TOKEN to avoid collision with Railway's own injected RAILWAY_API_KEY
+        "api_key": "RAILWAY_CREDIT_TOKEN",
+    },
+}
+
+
 def _load_credentials_from_env(provider_id: str) -> ProviderCredentials:
     """Load provider credentials from environment variables."""
     prefix = provider_id.upper().replace("-", "_")
+    overrides = _PROVIDER_ENV_OVERRIDES.get(provider_id, {})
+
+    def _get(field: str, default_var: str) -> Optional[str]:
+        """Get env var, using override name if defined."""
+        var_name = overrides.get(field, default_var)
+        return os.getenv(var_name)
+
     return ProviderCredentials(
-        api_key=os.getenv(f"{prefix}_API_KEY"),
-        admin_key=os.getenv(f"{prefix}_ADMIN_KEY"),
-        management_key=os.getenv(f"{prefix}_MANAGEMENT_KEY"),
-        session_cookie=os.getenv(f"{prefix}_SESSION_COOKIE"),
-        org_id=os.getenv(f"{prefix}_ORG_ID"),
-        team_id=os.getenv(f"{prefix}_TEAM_ID"),
-        api_secret=os.getenv(f"{prefix}_SECRET_ACCESS_KEY") or os.getenv(f"{prefix}_API_SECRET"),
+        api_key=_get("api_key", f"{prefix}_API_KEY"),
+        admin_key=_get("admin_key", f"{prefix}_ADMIN_KEY"),
+        management_key=_get("management_key", f"{prefix}_MANAGEMENT_KEY"),
+        session_cookie=_get("session_cookie", f"{prefix}_SESSION_COOKIE"),
+        org_id=_get("org_id", f"{prefix}_ORG_ID"),
+        team_id=_get("team_id", f"{prefix}_TEAM_ID"),
+        api_secret=(
+            _get("api_secret", f"{prefix}_SECRET_ACCESS_KEY")
+            or os.getenv(f"{prefix}_API_SECRET")
+        ),
     )

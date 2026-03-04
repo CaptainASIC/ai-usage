@@ -167,7 +167,7 @@ CLOUD_PROVIDERS = {
         "auth_fields": [
             {"key": "api_key", "label": "API Token", "placeholder": "Paste token", "secret": True},
         ],
-        "auth_help": "Generate a token at railway.app/account/tokens",
+        "auth_help": "Generate a token at railway.app/account/tokens — set as RAILWAY_CREDIT_TOKEN (not RAILWAY_API_KEY, which Railway injects automatically)",
         "tier": 1,
         "refresh_interval": 600,
     },

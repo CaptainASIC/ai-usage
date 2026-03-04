@@ -154,8 +154,9 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
   const manusMonthlyUsed      = typeof raw.manus_monthly_used      === 'number' ? raw.manus_monthly_used      : null;
   const manusMonthlyRemaining = typeof raw.manus_monthly_remaining === 'number' ? raw.manus_monthly_remaining : null;
   const manusMonthlyTotal = typeof raw.manus_monthly_total === 'number' ? raw.manus_monthly_total : null;
-  const manusDailyUsed    = typeof raw.manus_daily_used    === 'number' ? raw.manus_daily_used    : null;
-  const manusDailyTotal   = typeof raw.manus_daily_total   === 'number' ? raw.manus_daily_total   : null;
+  const manusDailyUsed      = typeof raw.manus_daily_used      === 'number' ? raw.manus_daily_used      : null;
+  const manusDailyRemaining = typeof raw.manus_daily_remaining === 'number' ? raw.manus_daily_remaining : null;
+  const manusDailyTotal     = typeof raw.manus_daily_total     === 'number' ? raw.manus_daily_total     : null;
   const manusAddonBalance = typeof raw.manus_addon_balance === 'number' ? raw.manus_addon_balance : null;
   const manusTotalBalance = typeof raw.manus_total_balance === 'number' ? raw.manus_total_balance : null;
 
@@ -325,18 +326,20 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
                 <div className="flex justify-between text-xs text-gray-400">
                   <span className="uppercase tracking-wide">Daily Refresh</span>
                   <span className="tabular-nums font-medium">
-                    {manusDailyUsed !== null
-                      ? `${Math.round(manusDailyUsed).toLocaleString()} / ${manusDailyTotal.toLocaleString()}`
-                      : `0 / ${manusDailyTotal.toLocaleString()}`
+                    {manusDailyRemaining !== null
+                      ? `${manusDailyRemaining.toLocaleString()} / ${manusDailyTotal.toLocaleString()}`
+                      : manusDailyUsed !== null
+                        ? `${Math.round(manusDailyUsed).toLocaleString()} / ${manusDailyTotal.toLocaleString()}`
+                        : `0 / ${manusDailyTotal.toLocaleString()}`
                     }
                   </span>
                 </div>
                 <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
-                  {manusDailyUsed !== null && manusDailyTotal > 0 && (
+                  {manusDailyTotal > 0 && (
                     <div
                       className={clsx('h-full rounded-full transition-all duration-500',
-                        barColor(1 - manusDailyUsed / manusDailyTotal))}
-                      style={{ width: `${Math.min(100, Math.round((1 - manusDailyUsed / manusDailyTotal) * 100))}%` }}
+                        barColor((manusDailyRemaining ?? 0) / manusDailyTotal))}
+                      style={{ width: `${Math.min(100, Math.round(((manusDailyRemaining ?? 0) / manusDailyTotal) * 100))}%` }}
                     />
                   )}
                 </div>

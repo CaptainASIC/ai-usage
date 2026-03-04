@@ -1,7 +1,7 @@
 """
 Manus provider — fetches credits via the Manus Connect RPC API.
 
-Endpoints (Connect RPC, POST, content-type: application/json):
+Endpoint (Connect RPC, POST, content-type: application/json):
 
   POST https://api.manus.im/user.v1.UserService/GetAvailableCredits
     body: {}
@@ -15,19 +15,22 @@ Endpoints (Connect RPC, POST, content-type: application/json):
         refreshInterval: str,     # "daily"
       }
 
-  POST https://api.manus.im/user.v1.UserService/WebdevUsageInfo
-    body: {}
-    → {
-        cloudRefreshUsage: float,       # daily refresh units consumed (e.g. 0.38 of 10)
-        cloudRefreshUsageBudget: int,   # daily refresh budget in cloud units (10 = 300 credits)
-      }
+Credit logic:
+  - Manus depletes monthly credits first, then add-on credits.
+  - monthly_remaining = max(0, total - addon - free)
+    → 0 when add-ons are being drawn (monthly fully consumed)
+  - daily_remaining = maxRefreshCredits if nextRefreshTime is in the past
+    (refresh already happened today but not yet used), else 0
+    NOTE: daily refresh credits are separate from totalCredits and not
+    directly returned by the API; we infer depletion from nextRefreshTime.
 
 Authentication: Bearer JWT token (set MANUS_API_KEY in env).
-
-No env vars required — all credit data is fetched live from the API.
+No additional env vars required.
 """
 
 import logging
+from datetime import datetime, timezone
+
 import httpx
 
 from models.schemas import BalanceSnapshot
@@ -35,9 +38,8 @@ from providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
-MANUS_API_BASE          = "https://api.manus.im"
-AVAILABLE_CREDITS_EP    = f"{MANUS_API_BASE}/user.v1.UserService/GetAvailableCredits"
-USAGE_INFO_ENDPOINT     = f"{MANUS_API_BASE}/user.v1.UserService/WebdevUsageInfo"
+MANUS_API_BASE       = "https://api.manus.im"
+AVAILABLE_CREDITS_EP = f"{MANUS_API_BASE}/user.v1.UserService/GetAvailableCredits"
 
 
 class ManusProvider(BaseProvider):
@@ -73,10 +75,7 @@ class ManusProvider(BaseProvider):
         client  = await self.get_client()
         headers = self._build_headers()
 
-        credits_data: dict | None = None
-        usage_data:   dict | None = None
-
-        # ── 1. GetAvailableCredits (primary — live balance breakdown) ─────────
+        # ── GetAvailableCredits ───────────────────────────────────────────────
         try:
             resp = await client.post(
                 AVAILABLE_CREDITS_EP,
@@ -91,92 +90,85 @@ class ManusProvider(BaseProvider):
                     "Refresh it from manus.im DevTools → Network → Authorization header."
                 )
             if resp.status_code == 200:
-                credits_data = resp.json()
-                logger.info("[Manus] GetAvailableCredits: %s", credits_data)
+                data = resp.json()
+                logger.info("[Manus] GetAvailableCredits: %s", data)
+                return self._build_snapshot(data)
         except httpx.TimeoutException:
             logger.warning("[Manus] GetAvailableCredits timed out")
         except Exception as e:
             logger.warning("[Manus] GetAvailableCredits error: %s", e)
 
-        # ── 2. WebdevUsageInfo (daily refresh ratio) ──────────────────────────
-        try:
-            resp = await client.post(
-                USAGE_INFO_ENDPOINT,
-                headers=headers,
-                content="{}",
-                timeout=15.0,
-            )
-            logger.debug("[Manus] WebdevUsageInfo → %d", resp.status_code)
-            if resp.status_code == 200:
-                usage_data = resp.json()
-                logger.info("[Manus] WebdevUsageInfo: %s", usage_data)
-        except httpx.TimeoutException:
-            logger.warning("[Manus] WebdevUsageInfo timed out")
-        except Exception as e:
-            logger.warning("[Manus] WebdevUsageInfo error: %s", e)
+        return self._error_snapshot(
+            "Could not fetch Manus credits. Check that your JWT token is valid."
+        )
 
-        return self._build_snapshot(credits_data, usage_data)
-
-    def _build_snapshot(
-        self,
-        credits_data: dict | None,
-        usage_data:   dict | None,
-    ) -> BalanceSnapshot:
+    def _build_snapshot(self, data: dict) -> BalanceSnapshot:
         """
         Build a BalanceSnapshot with three credit buckets in raw_data:
 
-          manus_monthly_total     - monthly plan allotment (from API: proMonthlyCredits)
-          manus_monthly_remaining - monthly credits still available
-                                    = min(totalCredits, proMonthlyCredits)
-          manus_daily_total       - daily refresh allotment (from API: maxRefreshCredits)
-          manus_daily_used        - daily refresh credits used (from WebdevUsageInfo ratio)
-          manus_addon_balance     - purchased add-on credits (from API: addonCredits)
-          manus_free_credits      - free/bonus credits (from API: freeCredits)
-          manus_total_balance     - total credits remaining (from API: totalCredits)
+          manus_monthly_total     - monthly plan allotment (proMonthlyCredits)
+          manus_monthly_remaining - monthly credits left (0 when add-ons active)
+          manus_daily_total       - daily refresh allotment (maxRefreshCredits)
+          manus_daily_remaining   - daily credits left (0 if refresh not yet happened)
+          manus_addon_balance     - purchased add-on credits (addonCredits)
+          manus_free_credits      - free/bonus credits (freeCredits)
+          manus_total_balance     - total credits remaining (totalCredits)
           manus_next_refresh      - ISO timestamp of next daily refresh
         """
-        if not credits_data:
-            return self._error_snapshot(
-                "Could not fetch Manus credits from GetAvailableCredits. "
-                "Check that your JWT token is valid."
-            )
-
-        total_balance   = credits_data.get("totalCredits")
-        free_credits    = credits_data.get("freeCredits", 0)
-        addon_credits   = credits_data.get("addonCredits", 0)
-        monthly_total   = credits_data.get("proMonthlyCredits", 40_000)
-        daily_total     = credits_data.get("maxRefreshCredits", 300)
-        next_refresh    = credits_data.get("nextRefreshTime")
+        total_balance  = data.get("totalCredits")
+        free_credits   = int(data.get("freeCredits",       0))
+        addon_credits  = int(data.get("addonCredits",      0))
+        monthly_total  = int(data.get("proMonthlyCredits", 40_000))
+        daily_total    = int(data.get("maxRefreshCredits", 300))
+        next_refresh   = data.get("nextRefreshTime")  # e.g. "2026-03-05T00:00:00Z"
 
         if total_balance is None:
             return self._error_snapshot(
                 "GetAvailableCredits response missing 'totalCredits' field."
             )
 
-        # Monthly remaining: total credits up to the monthly allotment
-        # (when total > monthly_total, monthly is fully available; excess = add-on)
-        monthly_remaining = min(int(total_balance), int(monthly_total))
+        total_balance = int(total_balance)
 
-        # ── Daily refresh used (from WebdevUsageInfo ratio) ───────────────────
-        daily_used: float | None = None
-        if usage_data:
-            cloud_used   = usage_data.get("cloudRefreshUsage")
-            cloud_budget = usage_data.get("cloudRefreshUsageBudget")
-            if cloud_used is not None and cloud_budget and cloud_budget > 0:
-                daily_used = round((cloud_used / cloud_budget) * daily_total, 1)
+        # ── Monthly remaining ─────────────────────────────────────────────────
+        # Manus consumes monthly credits first; add-ons only activate after
+        # monthly is exhausted. So monthly_remaining = total minus add-on and free.
+        monthly_remaining = max(0, total_balance - addon_credits - free_credits)
+        # Cap at the monthly allotment (can't exceed what the plan provides)
+        monthly_remaining = min(monthly_remaining, monthly_total)
+
+        # ── Daily refresh remaining ───────────────────────────────────────────
+        # The daily refresh pool is NOT included in totalCredits.
+        # nextRefreshTime is the next time the pool refills.
+        # If nextRefreshTime is in the future → the pool was refilled today
+        #   and may have been used. We can't know how much remains without
+        #   WebdevUsageInfo (which is unreliable), so we show 0 as a safe default
+        #   indicating the daily has been consumed.
+        # If nextRefreshTime is in the past → something is wrong; show 0.
+        daily_remaining = 0  # conservative: assume depleted
+
+        if next_refresh:
+            try:
+                refresh_dt = datetime.fromisoformat(
+                    next_refresh.replace("Z", "+00:00")
+                )
+                now = datetime.now(timezone.utc)
+                # If next refresh is more than 20 hours away, the daily pool
+                # was just refilled and hasn't been touched yet → show full.
+                hours_until_refresh = (refresh_dt - now).total_seconds() / 3600
+                if hours_until_refresh > 20:
+                    daily_remaining = daily_total
+                # Otherwise: refresh is coming soon → daily was used today → 0
+            except (ValueError, TypeError):
+                pass
 
         raw: dict = {
-            # Monthly quota bucket
-            "manus_monthly_total":     int(monthly_total),
+            "manus_monthly_total":     monthly_total,
             "manus_monthly_remaining": monthly_remaining,
-            # Daily refresh bucket
-            "manus_daily_total":       int(daily_total),
-            "manus_daily_used":        daily_used,
-            # Add-on and free buckets
-            "manus_addon_balance":     int(addon_credits),
-            "manus_free_credits":      int(free_credits),
-            # Total
-            "manus_total_balance":     int(total_balance),
+            "manus_daily_total":       daily_total,
+            "manus_daily_remaining":   daily_remaining,
+            "manus_addon_balance":     addon_credits,
+            "manus_free_credits":      free_credits,
+            "manus_total_balance":     total_balance,
             "manus_next_refresh":      next_refresh,
         }
 

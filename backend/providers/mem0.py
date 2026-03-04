@@ -4,7 +4,7 @@ mem0 provider — API key validation via the mem0 REST API.
 mem0 does not expose a public billing/credits endpoint. We validate the key
 and report memory count metadata using the v2 memories endpoint.
 
-Endpoint: POST https://api.mem0.ai/v2/memories
+Endpoint: POST https://api.mem0.ai/v2/memories/  (trailing slash required — Django APPEND_SLASH)
 Auth: Token <api_key>  (note: "Token", not "Bearer")
 
 Get your API key at: app.mem0.ai/dashboard/api-keys
@@ -45,7 +45,7 @@ class Mem0Provider(BaseProvider):
         try:
             # v2 POST endpoint — minimal request to validate key
             resp = await client.post(
-                f"{MEM0_API_BASE}/v2/memories",
+                f"{MEM0_API_BASE}/v2/memories/",
                 headers=headers,
                 json={"filters": {}, "page": 1, "page_size": 1},
                 timeout=15.0,

@@ -1,20 +1,20 @@
 """
-Plaud provider — reverse-engineered API via JWT session token.
+Plaud provider — uses the /user/stat/file REST endpoint.
 
-Auth: JWT token from localStorage.getItem("tokenstr") in the Plaud web app.
-      Token is long-lived (~10 months).
-      Store in PLAUD_JWT_TOKEN env var, or enter via the Settings panel.
-      The token should be passed in the `session_cookie` credential field
-      (it's a Bearer JWT, not a cookie, but we reuse the field for simplicity).
+Auth: Long-lived JWT from the Plaud web app (expires ~10 months after login).
+      Store in PLAUD_API_TOKEN env var, or enter via the Settings panel.
+      The token is a Bearer JWT — pass without the 'Bearer ' prefix.
 
 API base: https://api.plaud.ai
-Endpoints probed:
-  - GET /user/quota  → transcription minutes used/remaining
-  - GET /member/info → subscription plan details
-  - GET /file/simple/web → file count (fallback connectivity check)
+Endpoints used:
+  - GET /user/stat/file?diff_time=0&start_time=<epoch_ms>&end_time=<epoch_ms>
+    Returns: total_files, total_duration, total_transcribed_duration, group_result (daily)
+
+Note: Plaud has no subscription/quota API endpoint — plan info is not available via API.
 """
 
 import logging
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import httpx
@@ -26,6 +26,13 @@ logger = logging.getLogger(__name__)
 
 PLAUD_API_BASE = "https://api.plaud.ai"
 
+# Required headers for all Plaud API calls
+PLAUD_HEADERS_STATIC = {
+    "app-platform": "web",
+    "app-language": "en",
+    "Accept": "application/json",
+}
+
 
 class PlaudProvider(BaseProvider):
     """Plaud AI recorder usage provider (JWT token auth)."""
@@ -35,10 +42,10 @@ class PlaudProvider(BaseProvider):
     auth_type     = "session_cookie"  # reusing session_cookie field for JWT
 
     def is_configured(self) -> bool:
-        return bool(self.credentials.session_cookie)
+        return bool(self.credentials.session_cookie or self.credentials.api_key)
 
     def _get_token(self) -> Optional[str]:
-        token = self.credentials.session_cookie
+        token = self.credentials.api_key or self.credentials.session_cookie
         if not token:
             return None
         token = token.strip()
@@ -51,116 +58,101 @@ class PlaudProvider(BaseProvider):
             return self._unconfigured_snapshot()
 
         token = self._get_token()
+        if not token:
+            return self._unconfigured_snapshot()
+
         headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (compatible; AI-Credits-Tracker/1.0)",
+            **PLAUD_HEADERS_STATIC,
+            "authorization": f"bearer {token}",
         }
+
+        # Build time range: start of current month → now
+        now = datetime.now(timezone.utc)
+        month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+        now_ms = int(now.timestamp() * 1000)
+        start_ms = int(month_start.timestamp() * 1000)
+
+        # Also build a 30-day window for the all-time stat call
+        thirty_days_ago = now - timedelta(days=365)  # use 1 year for all-time
+        alltime_start_ms = int(thirty_days_ago.timestamp() * 1000)
 
         client = await self.get_client()
 
-        # Try /user/quota and /member/info in parallel
-        quota_data = await self._try_endpoint(client, headers, "/user/quota")
-        member_data = await self._try_endpoint(client, headers, "/member/info")
-
-        if quota_data is None and member_data is None:
-            # Connectivity check via file list
-            files_data = await self._try_endpoint(client, headers, "/file/simple/web")
-            if files_data is None:
-                return self._error_snapshot(
-                    "All Plaud API endpoints returned errors. Token may be expired."
-                )
-            file_count = len(files_data) if isinstance(files_data, list) else 0
-            return self._make_snapshot(
-                status="ok",
-                raw_data={
-                    "note": "Quota endpoint unavailable — showing file count",
-                    "file_count": file_count,
-                },
-            )
-
-        # Parse quota data
-        minutes_used: Optional[float] = None
-        minutes_total: Optional[float] = None
-        minutes_remaining: Optional[float] = None
-        plan_name: Optional[str] = None
-
-        if quota_data and isinstance(quota_data, dict):
-            data = quota_data.get("data") or quota_data.get("payload") or quota_data
-            if isinstance(data, dict):
-                minutes_used = (
-                    data.get("used_minutes")
-                    or data.get("transcription_used")
-                    or data.get("minutes_used")
-                    or data.get("used")
-                )
-                minutes_total = (
-                    data.get("total_minutes")
-                    or data.get("transcription_total")
-                    or data.get("minutes_total")
-                    or data.get("total")
-                    or data.get("quota")
-                )
-                minutes_remaining = (
-                    data.get("remaining_minutes")
-                    or data.get("transcription_remaining")
-                    or data.get("minutes_remaining")
-                    or data.get("remaining")
-                )
-                if minutes_remaining is None and minutes_total is not None and minutes_used is not None:
-                    try:
-                        minutes_remaining = float(minutes_total) - float(minutes_used)
-                    except (TypeError, ValueError):
-                        pass
-
-        if member_data and isinstance(member_data, dict):
-            data = member_data.get("data") or member_data.get("payload") or member_data
-            if isinstance(data, dict):
-                plan_name = (
-                    data.get("plan_name")
-                    or data.get("membership_type")
-                    or data.get("plan")
-                    or data.get("subscription_type")
-                    or data.get("level_name")
-                )
-
-        # Build result — Plaud uses minutes not USD, so we store in used_credits/remaining_credits
-        # with a note that the unit is minutes
         try:
-            rem   = float(minutes_remaining) if minutes_remaining is not None else None
-            tot   = float(minutes_total)     if minutes_total     is not None else None
-            used  = float(minutes_used)      if minutes_used      is not None else None
-        except (TypeError, ValueError):
-            rem = tot = used = None
+            # Monthly stats
+            monthly_resp = await client.get(
+                f"{PLAUD_API_BASE}/user/stat/file",
+                params={
+                    "diff_time": 0,
+                    "start_time": start_ms,
+                    "end_time": now_ms,
+                },
+                headers=headers,
+            )
+            if monthly_resp.status_code == 401:
+                return self._error_snapshot("Invalid or expired Plaud JWT token.")
+            if monthly_resp.status_code != 200:
+                return self._error_snapshot(
+                    f"Plaud API returned HTTP {monthly_resp.status_code}"
+                )
 
-        note = f"Unit: minutes · Plan: {plan_name}" if plan_name else "Unit: transcription minutes"
+            monthly_data = monthly_resp.json()
+            stat = monthly_data.get("data_stat") or monthly_data.get("data") or {}
 
-        return self._make_snapshot(
-            remaining_credits=rem,
-            total_credits=tot,
-            used_credits=used,
-            status="ok",
-            raw_data={
-                "note": note,
-                "plan": plan_name,
-                "quota_raw": quota_data,
-                "member_raw": member_data,
-            },
+            # All-time stats (use a wide window)
+            alltime_resp = await client.get(
+                f"{PLAUD_API_BASE}/user/stat/file",
+                params={
+                    "diff_time": 0,
+                    "start_time": alltime_start_ms,
+                    "end_time": now_ms,
+                },
+                headers=headers,
+            )
+            alltime_stat = {}
+            if alltime_resp.status_code == 200:
+                alltime_data = alltime_resp.json()
+                alltime_stat = alltime_data.get("data_stat") or alltime_data.get("data") or {}
+
+        except Exception as exc:
+            logger.error("[plaud] Request error: %s", exc)
+            return self._error_snapshot(f"Request failed: {exc}")
+
+        # Parse monthly stats
+        monthly_files = stat.get("total_files", 0)
+        monthly_duration_ms = stat.get("total_duration", 0)
+        monthly_transcribed_ms = stat.get("total_transcribed_duration", 0)
+        monthly_hours = round(monthly_duration_ms / 3_600_000, 1)
+        monthly_transcribed_hours = round(monthly_transcribed_ms / 3_600_000, 1)
+
+        # Parse all-time stats
+        alltime_files = alltime_stat.get("total_files", 0)
+        alltime_duration_ms = alltime_stat.get("total_duration", 0)
+        alltime_transcribed_ms = alltime_stat.get("total_transcribed_duration", 0)
+        alltime_hours = round(alltime_duration_ms / 3_600_000, 1)
+        alltime_transcribed_hours = round(alltime_transcribed_ms / 3_600_000, 1)
+
+        # 30-day daily average (in hours)
+        recent_avg_sec = stat.get("recent_30_days_daily_avg", 0)
+        recent_avg_hours = round(recent_avg_sec / 3600, 2) if recent_avg_sec else 0
+
+        logger.info(
+            "[Plaud] Monthly: %d files, %.1f hrs recorded, %.1f hrs transcribed | "
+            "All-time: %d files, %.1f hrs | 30d avg: %.2f hrs/day",
+            monthly_files, monthly_hours, monthly_transcribed_hours,
+            alltime_files, alltime_hours, recent_avg_hours,
         )
 
-    async def _try_endpoint(
-        self,
-        client: httpx.AsyncClient,
-        headers: dict,
-        path: str,
-    ) -> Optional[dict]:
-        """Try an endpoint, return parsed JSON or None on failure."""
-        try:
-            resp = await client.get(f"{PLAUD_API_BASE}{path}", headers=headers)
-            if resp.status_code == 200:
-                return resp.json()
-            logger.debug("Plaud %s returned HTTP %d", path, resp.status_code)
-            return None
-        except Exception as exc:
-            logger.debug("Plaud %s error: %s", path, exc)
-            return None
+        return self._make_snapshot(
+            status="ok",
+            raw_data={
+                "plaud_monthly_files": monthly_files,
+                "plaud_monthly_hours": monthly_hours,
+                "plaud_monthly_transcribed_hours": monthly_transcribed_hours,
+                "plaud_alltime_files": alltime_files,
+                "plaud_alltime_hours": alltime_hours,
+                "plaud_alltime_transcribed_hours": alltime_transcribed_hours,
+                "plaud_daily_avg_hours": recent_avg_hours,
+                "plaud_most_active_hour": stat.get("most_active_hour"),
+            },
+        )

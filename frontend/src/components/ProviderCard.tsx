@@ -150,14 +150,14 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
   const noteText       = typeof raw.note                 === 'string' ? raw.note                 : null;
 
   // ── Plaud-specific fields ──────────────────────────────────────────────
-  const isPlaud                   = snapshot.provider_id === 'plaud';
-  const plaudMonthlyFiles         = typeof raw.plaud_monthly_files         === 'number' ? raw.plaud_monthly_files         : null;
-  const plaudMonthlyHours         = typeof raw.plaud_monthly_hours         === 'number' ? raw.plaud_monthly_hours         : null;
-  const plaudMonthlyTranscribed   = typeof raw.plaud_monthly_transcribed_hours === 'number' ? raw.plaud_monthly_transcribed_hours : null;
-  const plaudAlltimeFiles         = typeof raw.plaud_alltime_files         === 'number' ? raw.plaud_alltime_files         : null;
-  const plaudAlltimeHours         = typeof raw.plaud_alltime_hours         === 'number' ? raw.plaud_alltime_hours         : null;
-  const plaudAlltimeTranscribed   = typeof raw.plaud_alltime_transcribed_hours === 'number' ? raw.plaud_alltime_transcribed_hours : null;
-  const plaudDailyAvg             = typeof raw.plaud_daily_avg_hours       === 'number' ? raw.plaud_daily_avg_hours       : null;
+  const isPlaud              = snapshot.provider_id === 'plaud';
+  const plaudTotalFiles      = typeof raw.plaud_total_files      === 'number' ? raw.plaud_total_files      : null;
+  const plaudTotalHours      = typeof raw.plaud_total_hours      === 'number' ? raw.plaud_total_hours      : null;
+  const plaudTranscribed     = typeof raw.plaud_total_transcribed_hours === 'number' ? raw.plaud_total_transcribed_hours : null;
+  const plaudActiveDays      = typeof raw.plaud_active_days      === 'number' ? raw.plaud_active_days      : null;
+  const plaudDailyAvg        = typeof raw.plaud_daily_avg_hours  === 'number' ? raw.plaud_daily_avg_hours  : null;
+  const plaudPlanName        = typeof raw.plaud_plan_name        === 'string' ? raw.plaud_plan_name        : null;
+  const plaudPlanExpires     = typeof raw.plaud_plan_expires     === 'string' ? raw.plaud_plan_expires     : null;
 
   // ── Manus-specific three-bucket fields ───────────────────────────────────
   const isManus         = snapshot.provider_id === 'manus';
@@ -182,7 +182,7 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
   type Mode = 'balance' | 'spend' | 'usage_monthly' | 'used' | 'manus' | 'plaud' | 'none';
   let mode: Mode = 'none';
   if (isOk) {
-    if (isPlaud && plaudMonthlyFiles !== null)
+    if (isPlaud && plaudTotalFiles !== null)
                                       mode = 'plaud';
     else if (isManus && (manusMonthlyTotal !== null || manusDailyTotal !== null || manusAddonBalance !== null))
                                       mode = 'manus';
@@ -304,46 +304,54 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
 
         {/* ── Plaud usage layout ── */}
         {mode === 'plaud' && (
-          <div className="space-y-2">
-            {/* This month */}
-            <div className="space-y-0.5">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">This Month</p>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-300 font-medium">
-                  {plaudMonthlyFiles !== null ? `${plaudMonthlyFiles} files` : '—'}
+          <div className="space-y-2.5">
+            {/* Plan badge */}
+            {plaudPlanName && (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                  bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                  {plaudPlanName}
                 </span>
-                <span className="text-gray-400 tabular-nums">
-                  {plaudMonthlyHours !== null ? `${plaudMonthlyHours} hrs recorded` : ''}
-                </span>
-              </div>
-              {plaudMonthlyTranscribed !== null && (
-                <p className="text-xs text-gray-600">{plaudMonthlyTranscribed} hrs transcribed</p>
-              )}
-            </div>
-
-            {/* All-time */}
-            <div className="border-t border-gray-800/60 pt-2 space-y-0.5">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">All-Time</p>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-300 font-medium">
-                  {plaudAlltimeFiles !== null ? `${plaudAlltimeFiles} files` : '—'}
-                </span>
-                <span className="text-gray-400 tabular-nums">
-                  {plaudAlltimeHours !== null ? `${plaudAlltimeHours} hrs` : ''}
-                </span>
-              </div>
-              {plaudAlltimeTranscribed !== null && (
-                <p className="text-xs text-gray-600">{plaudAlltimeTranscribed} hrs transcribed</p>
-              )}
-            </div>
-
-            {/* 30-day avg */}
-            {plaudDailyAvg !== null && (
-              <div className="flex items-center gap-1.5 text-xs text-gray-600 pt-0.5">
-                <TrendingUp size={11} />
-                <span>{plaudDailyAvg} hrs/day avg (30d)</span>
+                {plaudPlanExpires && (
+                  <span className="text-xs text-gray-600">expires {plaudPlanExpires}</span>
+                )}
               </div>
             )}
+
+            {/* 3-column stats: Days / Recordings / Hours */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center">
+                <p className="text-lg font-bold tabular-nums text-gray-100">
+                  {plaudActiveDays !== null ? plaudActiveDays : '—'}
+                </p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Days</p>
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-bold tabular-nums text-gray-100">
+                  {plaudTotalFiles !== null ? plaudTotalFiles : '—'}
+                </p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Recordings</p>
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-bold tabular-nums text-gray-100">
+                  {plaudTotalHours !== null ? plaudTotalHours : '—'}
+                </p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Hours</p>
+              </div>
+            </div>
+
+            {/* Transcribed + daily avg */}
+            <div className="border-t border-gray-800/60 pt-1.5 space-y-1">
+              {plaudTranscribed !== null && (
+                <p className="text-xs text-gray-500">{plaudTranscribed} hrs transcribed</p>
+              )}
+              {plaudDailyAvg !== null && plaudDailyAvg > 0 && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <TrendingUp size={11} />
+                  <span>{plaudDailyAvg} hrs/day avg (30d)</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

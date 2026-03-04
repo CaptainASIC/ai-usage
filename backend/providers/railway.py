@@ -78,8 +78,8 @@ class RailwayProvider(BaseProvider):
 
             if resp.status_code == 401:
                 return self._error_snapshot(
-                    "Invalid Railway token. Generate one at railway.app/account/tokens "
-                    "and set it as RAILWAY_CREDIT_TOKEN."
+                    "Invalid Railway token. Generate an Account token (select 'No workspace') "
+                    "at railway.app/account/tokens and set it as RAILWAY_CREDIT_TOKEN."
                 )
 
             resp.raise_for_status()
@@ -88,6 +88,13 @@ class RailwayProvider(BaseProvider):
             if "errors" in data and data["errors"]:
                 errors = data["errors"]
                 msg = errors[0].get("message", str(errors))
+                if "not authorized" in msg.lower() or "unauthorized" in msg.lower():
+                    return self._error_snapshot(
+                        "Railway token lacks billing access. "
+                        "You need an Account token (select 'No workspace') at "
+                        "railway.app/account/tokens — workspace/project tokens "
+                        "cannot read credit balance."
+                    )
                 return self._error_snapshot(f"GraphQL error: {msg}")
 
             me = data.get("data", {}).get("me") or {}

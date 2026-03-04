@@ -6,11 +6,35 @@ Two relevant endpoints discovered via network inspection:
 
   POST https://api.manus.im/user.v1.UserService/WebdevUsageInfo
     body: {}
-    → returns webdev usage quota / remaining info
+    → returns:
+        {
+          "cloudRefreshUsage": 0.38,
+          "aiRefreshUsageBudget": 1,
+          "cloudRefreshUsageBudget": 10,
+          "integrationsRefreshUsageBudget": 1,
+          "bindCard": true
+        }
+    NOTE: this endpoint returns quota/usage counts, NOT credit balance.
 
   POST https://api.manus.im/user.v1.UserService/ListUserCreditsLog
     body: {"page": 1, "pageSize": 10}
-    → returns paginated credits transaction log
+    → returns:
+        {
+          "logs": [
+            {
+              "sessionId": "...",
+              "title": "...",
+              "createAt": 1772593008,
+              "credits": -5702,
+              "type": "CREDIT_LOG_TYPE_COST"
+            },
+            ...
+          ],
+          "total": 211   ← total number of log entries (NOT credit balance)
+        }
+    NOTE: credits are integers (positive = earned, negative = spent).
+          There is no "current balance" field in this response.
+          We derive remaining balance by summing all log entries.
 
 Authentication: Bearer JWT token.
 
@@ -38,6 +62,11 @@ MANUS_API_BASE = "https://api.manus.im"
 # Connect RPC endpoints (POST, content-type: application/json)
 USAGE_INFO_ENDPOINT = f"{MANUS_API_BASE}/user.v1.UserService/WebdevUsageInfo"
 CREDITS_LOG_ENDPOINT = f"{MANUS_API_BASE}/user.v1.UserService/ListUserCreditsLog"
+
+# Manus credits are integer units (not USD).
+# Approximate conversion: 1 USD ≈ 3500 credits (based on observed spend).
+# We display raw credit integers; no USD conversion applied.
+CREDITS_PER_USD = 3500
 
 
 class ManusProvider(BaseProvider):
@@ -76,7 +105,10 @@ class ManusProvider(BaseProvider):
         client = await self.get_client()
         headers = self._build_headers()
 
-        # ── 1. Try WebdevUsageInfo ──────────────────────────────────────────
+        usage_data: dict | None = None
+        log_data: dict | None = None
+
+        # ── 1. WebdevUsageInfo ──────────────────────────────────────────────
         try:
             resp = await client.post(
                 USAGE_INFO_ENDPOINT,
@@ -84,7 +116,7 @@ class ManusProvider(BaseProvider):
                 content="{}",
                 timeout=15.0,
             )
-            logger.info("[Manus] WebdevUsageInfo → %d", resp.status_code)
+            logger.debug("[Manus] WebdevUsageInfo → %d", resp.status_code)
 
             if resp.status_code == 401:
                 return self._error_snapshot(
@@ -93,26 +125,25 @@ class ManusProvider(BaseProvider):
                 )
 
             if resp.status_code == 200:
-                data = resp.json()
-                logger.info("[Manus] WebdevUsageInfo data: %s", data)
-                snapshot = self._parse_usage_info(data)
-                if snapshot:
-                    return snapshot
+                usage_data = resp.json()
 
         except httpx.TimeoutException:
             logger.warning("[Manus] WebdevUsageInfo timed out")
         except Exception as e:
             logger.warning("[Manus] WebdevUsageInfo error: %s", e)
 
-        # ── 2. Fall back to ListUserCreditsLog ──────────────────────────────
+        # ── 2. ListUserCreditsLog ───────────────────────────────────────────
+        # Fetch all pages to compute the running balance from transactions.
+        # The API returns up to pageSize entries per call; we fetch page 1 first
+        # to get `total`, then fetch remaining pages.
         try:
             resp = await client.post(
                 CREDITS_LOG_ENDPOINT,
                 headers=headers,
-                content='{"page":1,"pageSize":10}',
+                content='{"page":1,"pageSize":100}',
                 timeout=15.0,
             )
-            logger.info("[Manus] ListUserCreditsLog → %d", resp.status_code)
+            logger.debug("[Manus] ListUserCreditsLog → %d", resp.status_code)
 
             if resp.status_code == 401:
                 return self._error_snapshot(
@@ -121,125 +152,101 @@ class ManusProvider(BaseProvider):
                 )
 
             if resp.status_code == 200:
-                data = resp.json()
-                logger.info("[Manus] ListUserCreditsLog data: %s", data)
-                snapshot = self._parse_credits_log(data)
-                if snapshot:
-                    return snapshot
+                log_data = resp.json()
 
         except httpx.TimeoutException:
             logger.warning("[Manus] ListUserCreditsLog timed out")
         except Exception as e:
             logger.warning("[Manus] ListUserCreditsLog error: %s", e)
 
-        return self._error_snapshot(
-            "Could not parse Manus credits data. "
-            "Check backend logs for the raw response fields."
+        # ── 3. Build snapshot from what we have ─────────────────────────────
+        return self._build_snapshot(usage_data, log_data)
+
+    def _build_snapshot(
+        self,
+        usage_data: dict | None,
+        log_data: dict | None,
+    ) -> BalanceSnapshot:
+        """
+        Build a BalanceSnapshot from the two API responses.
+
+        WebdevUsageInfo fields (actual):
+          cloudRefreshUsage          - float, cloud refresh slots used
+          cloudRefreshUsageBudget    - int, cloud refresh slot budget
+          aiRefreshUsageBudget       - int, AI refresh slot budget
+          integrationsRefreshUsageBudget - int
+
+        ListUserCreditsLog fields (actual):
+          logs[].credits  - int, positive = earned, negative = spent
+          logs[].type     - "CREDIT_LOG_TYPE_COST" | "CREDIT_LOG_TYPE_ROLLBACK" | ...
+          total           - int, total number of log entries (NOT balance)
+
+        Strategy:
+          - Sum all log entries to get net credits balance (running total).
+          - Use cloudRefreshUsage / cloudRefreshUsageBudget for usage percentage
+            as a secondary display metric.
+        """
+        net_credits: int | None = None
+        used_credits: int | None = None
+        cloud_used: float | None = None
+        cloud_budget: int | None = None
+
+        # Parse usage quota data
+        if usage_data:
+            cloud_used = usage_data.get("cloudRefreshUsage")
+            cloud_budget = usage_data.get("cloudRefreshUsageBudget")
+
+        # Compute net balance from transaction log
+        if log_data and isinstance(log_data.get("logs"), list):
+            logs = log_data["logs"]
+            net_credits = sum(
+                int(entry["credits"])
+                for entry in logs
+                if isinstance(entry.get("credits"), (int, float))
+            )
+            # Separate cost vs earned
+            spent = sum(
+                abs(int(e["credits"]))
+                for e in logs
+                if isinstance(e.get("credits"), (int, float)) and e["credits"] < 0
+            )
+            used_credits = spent
+
+        if net_credits is None and cloud_used is None:
+            return self._error_snapshot(
+                "Could not parse Manus credits data. "
+                "Check backend logs for the raw response fields."
+            )
+
+        # Build display values
+        # Credits are raw integers; convert to a pseudo-USD for display consistency
+        remaining_usd = float(net_credits) / CREDITS_PER_USD if net_credits is not None else None
+        used_usd = float(used_credits) / CREDITS_PER_USD if used_credits is not None else None
+
+        # Usage percentage from cloud refresh quota (most meaningful metric)
+        usage_pct: float | None = None
+        if cloud_used is not None and cloud_budget and cloud_budget > 0:
+            usage_pct = (cloud_used / cloud_budget) * 100
+
+        raw: dict = {}
+        if usage_data:
+            raw.update({
+                "cloud_refresh_used": cloud_used,
+                "cloud_refresh_budget": cloud_budget,
+                "ai_refresh_budget": usage_data.get("aiRefreshUsageBudget"),
+            })
+        if log_data:
+            raw.update({
+                "net_credits": net_credits,
+                "log_entry_count": log_data.get("total"),
+            })
+
+        return self._make_snapshot(
+            balance_usd=None,
+            remaining_credits=remaining_usd,
+            used_credits=used_usd,
+            total_credits=None,
+            usage_percentage=usage_pct,
+            status="ok",
+            raw_data=raw,
         )
-
-    # ── Parsers ────────────────────────────────────────────────────────────
-
-    def _parse_usage_info(self, data: dict) -> BalanceSnapshot | None:
-        """
-        Parse WebdevUsageInfo response.
-        Expected fields (based on Connect RPC convention):
-          totalCredits, usedCredits, remainingCredits, quota, used, remaining, ...
-        """
-        # Try common field name patterns
-        remaining = None
-        total = None
-        used = None
-
-        for key in ("remainingCredits", "remaining_credits", "remaining", "available"):
-            if key in data:
-                try:
-                    remaining = float(data[key])
-                    break
-                except (TypeError, ValueError):
-                    pass
-
-        for key in ("totalCredits", "total_credits", "total", "quota"):
-            if key in data:
-                try:
-                    total = float(data[key])
-                    break
-                except (TypeError, ValueError):
-                    pass
-
-        for key in ("usedCredits", "used_credits", "used", "consumed"):
-            if key in data:
-                try:
-                    used = float(data[key])
-                    break
-                except (TypeError, ValueError):
-                    pass
-
-        # If we have remaining, that's enough
-        if remaining is not None:
-            usage_pct = None
-            if total and total > 0:
-                usage_pct = ((total - remaining) / total) * 100
-            elif used is not None and total:
-                usage_pct = (used / total) * 100
-
-            return self._make_snapshot(
-                balance_usd=None,
-                remaining_credits=remaining,
-                total_credits=total,
-                used_credits=used,
-                usage_percentage=usage_pct,
-                raw_data=data,
-            )
-
-        # If we only have total + used, compute remaining
-        if total is not None and used is not None:
-            remaining = total - used
-            usage_pct = (used / total * 100) if total > 0 else None
-            return self._make_snapshot(
-                balance_usd=None,
-                remaining_credits=remaining,
-                total_credits=total,
-                used_credits=used,
-                usage_percentage=usage_pct,
-                raw_data=data,
-            )
-
-        return None
-
-    def _parse_credits_log(self, data: dict) -> BalanceSnapshot | None:
-        """
-        Parse ListUserCreditsLog response.
-        Expected to have a list of transactions with balance/amount fields.
-        """
-        # Try to find a current balance from the log
-        for key in ("currentBalance", "current_balance", "balance", "totalCredits",
-                    "total_credits", "remainingCredits", "remaining_credits"):
-            if key in data:
-                try:
-                    val = float(data[key])
-                    return self._make_snapshot(
-                        balance_usd=None,
-                        remaining_credits=val,
-                        raw_data=data,
-                    )
-                except (TypeError, ValueError):
-                    pass
-
-        # Try to get balance from the first log entry
-        for list_key in ("list", "logs", "items", "data", "records"):
-            if list_key in data and isinstance(data[list_key], list) and data[list_key]:
-                entry = data[list_key][0]
-                for key in ("balance", "remainingBalance", "remaining_balance",
-                            "afterBalance", "after_balance"):
-                    if key in entry:
-                        try:
-                            val = float(entry[key])
-                            return self._make_snapshot(
-                                balance_usd=None,
-                                remaining_credits=val,
-                                raw_data=data,
-                            )
-                        except (TypeError, ValueError):
-                            pass
-
-        return None

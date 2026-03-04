@@ -3,6 +3,16 @@
  */
 
 /**
+ * Format a raw credit integer for display (e.g. "142,363 cr").
+ */
+export function formatCredits(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+  }).format(Math.round(value)) + ' cr';
+}
+
+/**
  * Format a USD dollar amount for display.
  */
 export function formatUSD(value: number | null | undefined): string {

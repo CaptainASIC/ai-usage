@@ -126,15 +126,16 @@ class RailwayProvider(BaseProvider):
 
                 workspace_data.append({
                     "workspace": ws.get("name"),
-                    "credit_balance_cents": credit_cents,
-                    "current_usage_cents": usage_cents,
-                    "remaining_usage_credit_cents": remaining_cents,
+                    "credit_balance_usd": credit_cents,
+                    "current_usage_usd": usage_cents,
+                    "remaining_usage_credit_usd": remaining_cents,
                     "is_prepaying": customer.get("isPrepaying"),
                 })
 
-            balance_usd = float(total_credit_cents) / 100.0
-            usage_usd = float(total_usage_cents) / 100.0
-            limit_usd = float(usage_limit_cents) / 100.0 if usage_limit_cents else None
+            # Railway GraphQL returns monetary values in dollars (float), not cents.
+            balance_usd = float(total_credit_cents)
+            usage_usd = float(total_usage_cents)
+            limit_usd = float(usage_limit_cents) if usage_limit_cents else None
 
             return self._make_snapshot(
                 remaining_credits=balance_usd if balance_usd > 0 else None,

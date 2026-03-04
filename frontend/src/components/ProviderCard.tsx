@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { BalanceSnapshot } from '../types';
-import { formatUSD, formatRelativeTime } from '../utils/format';
+import { formatUSD, formatCredits, formatRelativeTime } from '../utils/format';
 import { api } from '../utils/api';
 
 interface ProviderCardProps {
@@ -141,6 +141,8 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
   const remaining = snapshot.remaining_credits ?? snapshot.balance_usd;
   const total     = snapshot.total_credits;
   const used      = snapshot.used_credits;
+  const isCredits = snapshot.currency === 'credits';
+  const fmt       = isCredits ? formatCredits : formatUSD;
 
   const raw = snapshot.raw_data ?? {};
   const thirtyDaySpend = typeof raw.thirty_day_spend_usd === 'number' ? raw.thirty_day_spend_usd : null;
@@ -208,19 +210,19 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Remaining</p>
               <p className={clsx('text-2xl font-bold tabular-nums', balanceColor(remaining, total))}>
-                {formatUSD(remaining)}
+                {fmt(remaining)}
               </p>
             </div>
             {total !== null && (
               <p className="text-xs text-gray-500">
-                of {formatUSD(total)} total
-                {used !== null ? ` · ${formatUSD(used)} used` : ''}
+                of {fmt(total)} total
+                {used !== null ? ` · ${fmt(used)} used` : ''}
               </p>
             )}
             {total === null && used !== null && (
               <div className="flex items-center gap-1.5 text-xs text-gray-500">
                 <TrendingUp size={11} />
-                <span>{formatUSD(used)} used</span>
+                <span>{fmt(used)} used</span>
               </div>
             )}
           </>
@@ -280,7 +282,7 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
           <div className="space-y-1 pt-1">
             <div className="flex justify-between text-xs text-gray-600">
               <span>{Math.round(usagePct * 100)}% remaining</span>
-              {total !== null && <span>{formatUSD(total)} limit</span>}
+              {total !== null && <span>{fmt(total)} limit</span>}
             </div>
             <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
               <div

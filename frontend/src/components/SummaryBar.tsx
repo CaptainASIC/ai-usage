@@ -2,7 +2,7 @@
  * SummaryBar - top bar showing total balance, refresh button, and settings link.
  */
 
-import { RefreshCw, Zap, Clock, Settings } from 'lucide-react';
+import { RefreshCw, Clock, Settings } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { DashboardResponse } from '../types';
 import { formatUSD, formatRelativeTime } from '../utils/format';
@@ -34,9 +34,7 @@ export function SummaryBar({
       {/* Left: branding + total */}
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
-            <Zap size={14} className="text-white" />
-          </div>
+          <img src="/logo.png" alt="Reckoner" className="w-7 h-7 rounded-lg object-cover" />
           <span className="font-semibold text-gray-100 text-sm tracking-tight">
             Reckoner
           </span>

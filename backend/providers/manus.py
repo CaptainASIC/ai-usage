@@ -84,7 +84,7 @@ class ManusProvider(BaseProvider):
                 content="{}",
                 timeout=15.0,
             )
-            logger.debug("[Manus] WebdevUsageInfo → %d", resp.status_code)
+            logger.info("[Manus] WebdevUsageInfo → %d", resp.status_code)
 
             if resp.status_code == 401:
                 return self._error_snapshot(
@@ -94,7 +94,7 @@ class ManusProvider(BaseProvider):
 
             if resp.status_code == 200:
                 data = resp.json()
-                logger.debug("[Manus] WebdevUsageInfo data keys: %s", list(data.keys()))
+                logger.info("[Manus] WebdevUsageInfo data: %s", data)
                 snapshot = self._parse_usage_info(data)
                 if snapshot:
                     return snapshot
@@ -112,7 +112,7 @@ class ManusProvider(BaseProvider):
                 content='{"page":1,"pageSize":10}',
                 timeout=15.0,
             )
-            logger.debug("[Manus] ListUserCreditsLog → %d", resp.status_code)
+            logger.info("[Manus] ListUserCreditsLog → %d", resp.status_code)
 
             if resp.status_code == 401:
                 return self._error_snapshot(
@@ -122,7 +122,7 @@ class ManusProvider(BaseProvider):
 
             if resp.status_code == 200:
                 data = resp.json()
-                logger.debug("[Manus] ListUserCreditsLog data keys: %s", list(data.keys()))
+                logger.info("[Manus] ListUserCreditsLog data: %s", data)
                 snapshot = self._parse_credits_log(data)
                 if snapshot:
                     return snapshot

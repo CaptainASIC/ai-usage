@@ -1,19 +1,21 @@
 # Railway configuration — AI Credits Tracker Frontend Service
 #
-# Root directory in Railway: /frontend
-# Railpack detects Node from package.json.
-# Build: pnpm build (Vite → dist/public/ + esbuild server → dist/index.js)
-# Start: node dist/index.js (Express serves dist/public/ as static root)
+# Deploy this as a Railway service with root directory set to: /frontend
+# PORT is set automatically by Railway.
+#
+# Build: pnpm run build  (Vite → dist/public/ + esbuild server → dist/index.js)
+# Start: node dist/index.js  (Express serves the built React SPA)
 #
 # Required environment variables:
 #   VITE_API_URL = https://your-backend-service.railway.app
 
 [build]
 builder = "RAILPACK"
+buildCommand = "pnpm run build"
 
 [deploy]
 startCommand = "node dist/index.js"
 healthcheckPath = "/"
 healthcheckTimeout = 30
-restartPolicyType = "ON_FAILURE"
+restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

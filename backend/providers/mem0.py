@@ -47,8 +47,9 @@ class Mem0Provider(BaseProvider):
             resp = await client.post(
                 f"{MEM0_API_BASE}/v2/memories/",
                 headers=headers,
-                # filters cannot be empty — use wildcard to match all memories
-                json={"filters": {"user_id": {"*": "*"}}, "page": 1, "page_size": 1},
+                # filters cannot be empty — use ne with a sentinel to match all memories
+                # (the * wildcard operator is not supported on user_id)
+                json={"filters": {"user_id": {"ne": "__reckoner_sentinel__"}}, "page": 1, "page_size": 1},
                 timeout=15.0,
             )
 

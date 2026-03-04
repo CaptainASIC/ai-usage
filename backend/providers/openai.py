@@ -1,32 +1,34 @@
 """
-OpenAI provider - fetches costs via the official Admin API.
+OpenAI provider - fetches balance and costs via the OpenAI API.
 
-OpenAI does NOT expose a direct balance/credits endpoint via standard API keys.
-Instead, we use the Admin API (requires sk-admin-... key) to fetch:
-  - /v1/organization/costs - daily cost breakdown in USD
-  - /v1/organization/usage/completions - token usage data
+Balance endpoint (standard sk- key):
+  GET https://api.openai.com/v1/dashboard/billing/credit_grants
+  → data.total_granted, data.total_used, data.total_available
 
-The balance_usd shown is the rolling 30-day spend (not remaining balance).
-Users must check the OpenAI dashboard for exact remaining credits.
+Cost endpoint (Admin key sk-admin-...):
+  GET https://api.openai.com/v1/organization/costs
+  → rolling 30-day spend breakdown
+
+If a credit_grants balance is available, it is shown as the primary metric.
+If not (PAYG account), the 30-day spend from the Admin API is shown instead.
 """
 
 import logging
 import time
-from datetime import datetime, timezone, timedelta
 
 import httpx
 
-from models.schemas import BalanceSnapshot, ProviderCredentials
+from models.schemas import BalanceSnapshot
 from providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
-COSTS_ENDPOINT = "https://api.openai.com/v1/organization/costs"
-USAGE_ENDPOINT = "https://api.openai.com/v1/organization/usage/completions"
+CREDIT_GRANTS_ENDPOINT = "https://api.openai.com/v1/dashboard/billing/credit_grants"
+COSTS_ENDPOINT         = "https://api.openai.com/v1/organization/costs"
 
 
 class OpenAIProvider(BaseProvider):
-    """OpenAI cost and usage provider."""
+    """OpenAI balance and cost provider."""
 
     provider_id = "openai"
     provider_name = "OpenAI"
@@ -36,59 +38,93 @@ class OpenAIProvider(BaseProvider):
         return bool(self.credentials.admin_key or self.credentials.api_key)
 
     async def fetch_balance(self) -> BalanceSnapshot:
-        """Fetch 30-day cost data from OpenAI Admin API."""
         if not self.is_configured():
             return self._unconfigured_snapshot()
 
-        # Prefer admin key; fall back to regular API key (limited access)
-        key = self.credentials.admin_key or self.credentials.api_key
-        client = await self.get_client()
-        headers = {
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        }
+        # Prefer admin key for cost data; standard key works for credit_grants
+        admin_key  = self.credentials.admin_key
+        std_key    = self.credentials.api_key
+        active_key = admin_key or std_key
 
-        # Fetch last 30 days of costs
-        start_time = int(time.time()) - (30 * 24 * 60 * 60)
+        client  = await self.get_client()
+        headers = {"Authorization": f"Bearer {active_key}"}
+
+        # ── 1. Try credit_grants (works with standard sk- key) ────────────
+        total_granted:   float | None = None
+        total_used_cg:   float | None = None
+        total_available: float | None = None
 
         try:
-            response = await client.get(
-                COSTS_ENDPOINT,
-                headers=headers,
-                params={"start_time": start_time, "limit": 30},
-            )
-            response.raise_for_status()
-            data = response.json()
+            cg = await client.get(CREDIT_GRANTS_ENDPOINT, headers=headers, timeout=15.0)
+            if cg.status_code == 200:
+                cg_data = cg.json()
+                total_granted   = cg_data.get("total_granted")
+                total_used_cg   = cg_data.get("total_used")
+                total_available = cg_data.get("total_available")
+                logger.info(
+                    "[OpenAI] credit_grants → granted=%.4f used=%.4f available=%.4f",
+                    total_granted or 0, total_used_cg or 0, total_available or 0,
+                )
+        except Exception as exc:
+            logger.debug("[OpenAI] credit_grants fetch failed: %s", exc)
 
-            # Sum up all costs from the buckets
-            total_cost_usd = 0.0
-            buckets = data.get("data", [])
-            for bucket in buckets:
-                for result in bucket.get("results", []):
-                    amount = result.get("amount", {})
-                    value = float(amount.get("value", 0))
-                    total_cost_usd += value
+        # ── 2. Try 30-day costs (requires Admin key) ──────────────────────
+        thirty_day_spend: float | None = None
 
+        if admin_key:
+            try:
+                start_time = int(time.time()) - (30 * 24 * 60 * 60)
+                admin_headers = {"Authorization": f"Bearer {admin_key}"}
+                cr = await client.get(
+                    COSTS_ENDPOINT,
+                    headers=admin_headers,
+                    params={"start_time": start_time, "limit": 30},
+                    timeout=15.0,
+                )
+                if cr.status_code == 200:
+                    buckets = cr.json().get("data", [])
+                    thirty_day_spend = sum(
+                        float(r.get("amount", {}).get("value", 0))
+                        for b in buckets
+                        for r in b.get("results", [])
+                    )
+            except Exception as exc:
+                logger.debug("[OpenAI] costs fetch failed: %s", exc)
+
+        # ── 3. Decide what to surface ─────────────────────────────────────
+        has_credits = total_available is not None and (total_granted or 0) > 0
+
+        raw: dict = {}
+        if total_granted is not None:
+            raw["total_granted_usd"]   = total_granted
+            raw["total_used_usd"]      = total_used_cg
+            raw["total_available_usd"] = total_available
+        if thirty_day_spend is not None:
+            raw["thirty_day_spend_usd"] = round(thirty_day_spend, 4)
+        if not raw:
+            raw["note"] = "No data returned — check API key permissions."
+
+        if has_credits:
             return self._make_snapshot(
-                used_credits=round(total_cost_usd, 4),
-                raw_data={
-                    "note": "30-day spend shown. No direct balance API available.",
-                    "thirty_day_spend_usd": round(total_cost_usd, 4),
-                    "bucket_count": len(buckets),
-                },
+                balance_usd       = float(total_available),
+                total_credits     = float(total_granted),
+                used_credits      = float(total_used_cg or 0),
+                remaining_credits = float(total_available),
+                status            = "ok",
+                raw_data          = raw,
             )
 
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 401:
-                return self._error_snapshot(
-                    "Invalid key. Use an Admin key (sk-admin-...) from platform.openai.com/settings/organization/admin-keys"
-                )
-            if e.response.status_code == 403:
-                return self._error_snapshot(
-                    "Access denied. Admin key required for organization cost data."
-                )
-            return self._error_snapshot(f"HTTP {e.response.status_code}: {e.response.text[:200]}")
-        except httpx.RequestError as e:
-            return self._error_snapshot(f"Network error: {str(e)}")
-        except Exception as e:
-            return self._error_snapshot(f"Unexpected error: {str(e)}")
+        if thirty_day_spend is not None:
+            raw.setdefault("note", "PAYG account — showing 30-day spend. No prepaid balance.")
+            return self._make_snapshot(
+                used_credits = round(thirty_day_spend, 4),
+                status       = "ok",
+                raw_data     = raw,
+            )
+
+        # Both endpoints failed — report auth error
+        return self._error_snapshot(
+            "Could not fetch OpenAI data. "
+            "Use a standard API key (sk-...) for credit balance, "
+            "or an Admin key (sk-admin-...) for cost data."
+        )

@@ -4,11 +4,14 @@ Neon DB provider — fetches compute usage via the Neon Console API.
 Endpoint: GET https://console.neon.tech/api/v2/consumption_history/account
 Auth: Bearer API key (from console.neon.tech/app/settings/api-keys)
 
+Required params: from (ISO 8601), to (ISO 8601), granularity (hourly|daily|monthly)
+
 Returns compute unit seconds and storage bytes used in the current period.
 Available for Launch, Scale, Agent, and Enterprise plans.
 """
 
 import logging
+from datetime import datetime, timezone
 import httpx
 from models.schemas import BalanceSnapshot
 from providers.base import BaseProvider
@@ -40,10 +43,17 @@ class NeonProvider(BaseProvider):
         }
 
         try:
-            # Try account-level consumption first
+            # Neon requires explicit from/to params (ISO 8601)
+            now = datetime.now(timezone.utc)
+            # Start of current calendar month
+            period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            from_ts = period_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+            to_ts   = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
             resp = await client.get(
                 f"{NEON_API_BASE}/consumption_history/account",
                 headers=headers,
+                params={"from": from_ts, "to": to_ts, "granularity": "monthly"},
                 timeout=15.0,
             )
 
@@ -56,7 +66,6 @@ class NeonProvider(BaseProvider):
                     "Forbidden — consumption history requires a paid Neon plan (Launch or above)."
                 )
             if resp.status_code == 404:
-                # Fall back to just validating the key via projects list
                 return await self._fallback_projects(client, headers)
 
             resp.raise_for_status()
@@ -78,16 +87,15 @@ class NeonProvider(BaseProvider):
             consumption = latest.get("consumption", {})
 
             compute_seconds = consumption.get("compute_unit_seconds", 0)
-            storage_bytes = consumption.get("root_branch_bytes_month", 0)
-            data_transfer = consumption.get("public_network_transfer_bytes", 0)
+            storage_bytes   = consumption.get("root_branch_bytes_month", 0)
+            data_transfer   = consumption.get("public_network_transfer_bytes", 0)
 
-            # Convert compute seconds to compute hours for readability
             compute_hours = round(compute_seconds / 3600, 2) if compute_seconds else 0
-            storage_gb = round(storage_bytes / (1024 ** 3), 3) if storage_bytes else 0
-            transfer_gb = round(data_transfer / (1024 ** 3), 3) if data_transfer else 0
+            storage_gb    = round(storage_bytes / (1024 ** 3), 3) if storage_bytes else 0
+            transfer_gb   = round(data_transfer / (1024 ** 3), 3) if data_transfer else 0
 
             return self._make_snapshot(
-                used_credits=compute_hours,  # compute hours as the primary metric
+                used_credits=compute_hours,
                 status="ok",
                 raw_data={
                     "note": "Unit: compute hours (CU·h) this billing period",

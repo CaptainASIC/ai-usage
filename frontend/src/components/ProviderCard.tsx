@@ -151,7 +151,8 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
 
   // ── Manus-specific three-bucket fields ───────────────────────────────────
   const isManus         = snapshot.provider_id === 'manus';
-  const manusMonthlyUsed  = typeof raw.manus_monthly_used  === 'number' ? raw.manus_monthly_used  : null;
+  const manusMonthlyUsed      = typeof raw.manus_monthly_used      === 'number' ? raw.manus_monthly_used      : null;
+  const manusMonthlyRemaining = typeof raw.manus_monthly_remaining === 'number' ? raw.manus_monthly_remaining : null;
   const manusMonthlyTotal = typeof raw.manus_monthly_total === 'number' ? raw.manus_monthly_total : null;
   const manusDailyUsed    = typeof raw.manus_daily_used    === 'number' ? raw.manus_daily_used    : null;
   const manusDailyTotal   = typeof raw.manus_daily_total   === 'number' ? raw.manus_daily_total   : null;
@@ -298,18 +299,20 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
                 <div className="flex justify-between text-xs text-gray-400">
                   <span className="uppercase tracking-wide">Monthly</span>
                   <span className="tabular-nums font-medium">
-                    {manusMonthlyUsed !== null
-                      ? `${manusMonthlyUsed.toLocaleString()} / ${manusMonthlyTotal.toLocaleString()}`
-                      : `0 / ${manusMonthlyTotal.toLocaleString()}`
+                    {manusMonthlyRemaining !== null
+                      ? `${manusMonthlyRemaining.toLocaleString()} / ${manusMonthlyTotal.toLocaleString()}`
+                      : manusMonthlyUsed !== null
+                        ? `${manusMonthlyUsed.toLocaleString()} / ${manusMonthlyTotal.toLocaleString()}`
+                        : `0 / ${manusMonthlyTotal.toLocaleString()}`
                     }
                   </span>
                 </div>
                 <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
-                  {manusMonthlyUsed !== null && manusMonthlyTotal > 0 && (
+                  {manusMonthlyTotal > 0 && (manusMonthlyRemaining !== null || manusMonthlyUsed !== null) && (
                     <div
                       className={clsx('h-full rounded-full transition-all duration-500',
-                        barColor(1 - manusMonthlyUsed / manusMonthlyTotal))}
-                      style={{ width: `${Math.min(100, Math.round((1 - manusMonthlyUsed / manusMonthlyTotal) * 100))}%` }}
+                        barColor((manusMonthlyRemaining ?? 0) / manusMonthlyTotal))}
+                      style={{ width: `${Math.min(100, Math.round(((manusMonthlyRemaining ?? 0) / manusMonthlyTotal) * 100))}%` }}
                     />
                   )}
                 </div>

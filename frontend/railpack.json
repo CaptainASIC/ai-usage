@@ -10,6 +10,6 @@
     }
   },
   "deploy": {
-    "startCommand": "node server.js"
+    "startCommand": "node dist/index.js"
   }
 }

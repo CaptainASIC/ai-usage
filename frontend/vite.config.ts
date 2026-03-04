@@ -7,6 +7,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    // Output to dist/public/ so the esbuild-bundled server (dist/index.js)
+    // can resolve static files via path.resolve(__dirname, 'public')
+    outDir: 'dist/public',
+    emptyOutDir: true,
+  },
   server: {
     allowedHosts: true,
     // Dev proxy: forwards /api calls to the local backend

@@ -2,7 +2,8 @@
 #
 # Root directory in Railway: /frontend
 # Railpack detects Node from package.json.
-# Builds the React app with pnpm, serves via a lightweight static server.
+# Build: pnpm build (Vite → dist/public/ + esbuild server → dist/index.js)
+# Start: node dist/index.js (Express serves dist/public/ as static root)
 #
 # Required environment variables:
 #   VITE_API_URL = https://your-backend-service.railway.app
@@ -11,7 +12,7 @@
 builder = "RAILPACK"
 
 [deploy]
-startCommand = "node server.js"
+startCommand = "node dist/index.js"
 healthcheckPath = "/"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"

@@ -56,7 +56,7 @@ class NeonProvider(BaseProvider):
             resp = await client.get(
                 f"{NEON_API_BASE}/consumption_history/account",
                 headers=headers,
-                params={"from": from_ts, "to": to_ts, "granularity": "monthly"},
+                params={"from": from_ts, "to": to_ts, "granularity": "daily"},
                 timeout=15.0,
             )
 
@@ -74,7 +74,7 @@ class NeonProvider(BaseProvider):
             resp.raise_for_status()
             data = resp.json()
 
-            # Parse consumption data
+            # Parse consumption data — sum all daily buckets for the current month
             periods = data.get("periods", [])
             if not periods:
                 return self._make_snapshot(
@@ -85,35 +85,36 @@ class NeonProvider(BaseProvider):
                     },
                 )
 
-            # Use the most recent period
-            latest = periods[-1] if periods else {}
-            consumption = latest.get("consumption", {})
+            # Sum across all daily periods in the response
+            total_compute_seconds = 0
+            total_storage_bytes   = 0
+            total_transfer_bytes  = 0
+            for period in periods:
+                c = period.get("consumption", {})
+                total_compute_seconds += c.get("compute_time_seconds", 0) or c.get("compute_unit_seconds", 0)
+                total_storage_bytes   += c.get("root_branch_bytes_month", 0)
+                total_transfer_bytes  += c.get("public_network_transfer_bytes", 0)
 
-            compute_seconds = consumption.get("compute_unit_seconds", 0)
-            storage_bytes   = consumption.get("root_branch_bytes_month", 0)
-            data_transfer   = consumption.get("public_network_transfer_bytes", 0)
-
-            compute_hours = round(compute_seconds / 3600, 2) if compute_seconds else 0
-            storage_gb    = round(storage_bytes / (1024 ** 3), 3) if storage_bytes else 0
-            transfer_gb   = round(data_transfer / (1024 ** 3), 3) if data_transfer else 0
+            compute_hours = round(total_compute_seconds / 3600, 2) if total_compute_seconds else 0
+            storage_gb    = round(total_storage_bytes / (1024 ** 3), 3) if total_storage_bytes else 0
+            transfer_gb   = round(total_transfer_bytes / (1024 ** 3), 3) if total_transfer_bytes else 0
 
             return self._make_snapshot(
                 used_credits=compute_hours,
                 status="ok",
                 raw_data={
-                    "note": "Unit: compute hours (CU·h) this billing period",
+                    "note": "Unit: compute hours (CU·h) this billing period (daily granularity, summed)",
                     "compute_hours": compute_hours,
-                    "compute_seconds": compute_seconds,
+                    "compute_seconds": total_compute_seconds,
                     "storage_gb": storage_gb,
                     "data_transfer_gb": transfer_gb,
-                    "period": latest.get("period_id"),
                 },
             )
 
         except httpx.TimeoutException:
             return self._error_snapshot("Request timed out reaching Neon API.")
         except httpx.HTTPStatusError as exc:
-            return self._error_snapshot(f"HTTP {exc.response.status_code}: {exc.response.text[:200]}")
+            return self._error_snapshot(f"HTTP {exc.response.status_code}: {exc.response.text[:500]}")
         except Exception as exc:
             return self._error_snapshot(f"Unexpected error: {exc}")
 

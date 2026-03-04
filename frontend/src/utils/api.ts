@@ -1,5 +1,5 @@
 /**
- * API client for the AI Credits Tracker backend.
+ * API client for the Reckoner backend.
  */
 
 import type {

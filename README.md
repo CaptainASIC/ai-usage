@@ -1,4 +1,4 @@
-# AI Credits Tracker
+# Reckoner
 
 A fast, single-page dashboard for monitoring your cloud AI service credits and balances across OpenRouter, OpenAI, Anthropic, xAI (Grok), Mistral, Groq, Manus, Warp, and more.
 
@@ -61,8 +61,8 @@ Open http://localhost:5173 for the dashboard.
 ### Deploy with Docker
 
 ```bash
-docker build -t ai-credits-tracker .
-docker run -p 8000:8000 --env-file .env ai-credits-tracker
+docker build -t reckoner .
+docker run -p 8000:8000 --env-file .env reckoner
 ```
 
 ## Configuration
@@ -111,7 +111,7 @@ Click the ⚙️ icon on any provider card to configure credentials directly in 
 ## Architecture
 
 ```
-ai-credits-tracker/
+reckoner/
 ├── backend/                  # FastAPI application
 │   ├── main.py               # App entry point, serves frontend
 │   ├── scheduler.py          # Background balance refresh

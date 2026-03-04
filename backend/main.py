@@ -1,5 +1,5 @@
 """
-AI Credits Tracker — FastAPI Backend
+Reckoner — FastAPI Backend
 
 Split deployment: this service provides the API only.
 The React frontend is a separate Railway service.
@@ -27,16 +27,16 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown events."""
-    logger.info("Starting AI Credits Tracker API...")
+    logger.info("Starting Reckoner API...")
     await init_db()
     start_scheduler()
     yield
-    logger.info("Shutting down AI Credits Tracker API...")
+    logger.info("Shutting down Reckoner API...")
     stop_scheduler()
 
 
 app = FastAPI(
-    title="AI Credits Tracker API",
+    title="Reckoner API",
     description="Backend API for monitoring cloud AI service balances and usage",
     version="2.0.0",
     lifespan=lifespan,
@@ -87,7 +87,7 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 @app.get("/", include_in_schema=False)
 async def root():
     return {
-        "service": "AI Credits Tracker API",
+        "service": "Reckoner API",
         "version": "2.0.0",
         "docs": "/docs",
         "health": "/api/health",

@@ -1,5 +1,5 @@
 [project]
-name = "ai-credits-tracker"
+name = "reckoner"
 version = "1.0.0"
 description = "AI Credits Usage Tracker — Dashboard for monitoring cloud AI service balances"
 requires-python = ">=3.13"

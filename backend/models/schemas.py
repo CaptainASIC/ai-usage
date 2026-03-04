@@ -1,5 +1,5 @@
 """
-Pydantic v2 schemas for the AI Credits Tracker API.
+Pydantic v2 schemas for the Reckoner API.
 """
 
 from datetime import datetime

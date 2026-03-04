@@ -158,7 +158,7 @@ class ManusProvider(BaseProvider):
           manus_monthly_total     - monthly allotment (MANUS_MONTHLY_CREDITS or 40000)
           manus_daily_used        - daily refresh credits used (from cloudRefreshUsage ratio)
           manus_daily_total       - daily refresh allotment (MANUS_DAILY_CREDITS or 300)
-          manus_addon_balance     - add-on credit balance (MANUS_ADDON_CREDITS env var)
+          manus_addon_balance     - add-on credits (derived: max(0, total - monthly_allotment))
           manus_total_balance     - total balance (MANUS_TOTAL_CREDITS env var)
 
         The primary remaining_credits / total_credits fields show the total balance
@@ -166,9 +166,14 @@ class ManusProvider(BaseProvider):
         """
         # ── Read env-var overrides ──────────────────────────────────────────
         total_balance  = self._get_env_int("MANUS_TOTAL_CREDITS")
-        addon_balance  = self._get_env_int("MANUS_ADDON_CREDITS")
         monthly_total  = self._get_env_int("MANUS_MONTHLY_CREDITS", DEFAULT_MONTHLY_CREDITS)
         daily_total    = self._get_env_int("MANUS_DAILY_CREDITS",   DEFAULT_DAILY_CREDITS)
+
+        # Derive add-on balance: anything above the monthly allotment is add-on credits.
+        # When total < monthly_allotment, you're within your monthly quota (add-on = 0).
+        addon_balance: int | None = None
+        if total_balance is not None and monthly_total is not None:
+            addon_balance = max(0, total_balance - monthly_total)
 
         # ── Parse log entries for monthly spend ─────────────────────────────
         monthly_spent: int = 0

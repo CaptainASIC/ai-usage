@@ -38,7 +38,7 @@ export function SummaryBar({
             <Zap size={14} className="text-white" />
           </div>
           <span className="font-semibold text-gray-100 text-sm tracking-tight">
-            AI Credits
+            Reckoner
           </span>
         </div>
 

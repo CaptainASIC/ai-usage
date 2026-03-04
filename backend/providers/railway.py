@@ -35,7 +35,11 @@ query GetCreditBalance {
         currentUsage
         appliedCredits
         isPrepaying
-        usageLimit
+        usageLimit {
+          hardLimit
+          softLimit
+          isOverLimit
+        }
       }
     }
   }
@@ -105,7 +109,8 @@ class RailwayProvider(BaseProvider):
                 credit_cents = customer.get("creditBalance") or 0
                 usage_cents = customer.get("currentUsage") or 0
                 remaining_cents = customer.get("remainingUsageCreditBalance") or 0
-                limit_cents = customer.get("usageLimit")
+                usage_limit_obj = customer.get("usageLimit") or {}
+                limit_cents = usage_limit_obj.get("hardLimit") or usage_limit_obj.get("softLimit")
 
                 total_credit_cents += credit_cents
                 total_usage_cents += usage_cents

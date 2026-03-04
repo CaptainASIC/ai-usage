@@ -43,12 +43,15 @@ class NeonProvider(BaseProvider):
         }
 
         try:
-            # Neon requires explicit from/to params (ISO 8601)
+            from datetime import timedelta
+            # Neon requires explicit from/to params (ISO 8601) and from < to
             now = datetime.now(timezone.utc)
             # Start of current calendar month
             period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            # Ensure at least 1 minute gap so from < to even on the 1st of the month
+            to_dt   = now if now > period_start else period_start + timedelta(minutes=1)
             from_ts = period_start.strftime("%Y-%m-%dT%H:%M:%SZ")
-            to_ts   = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            to_ts   = to_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
             resp = await client.get(
                 f"{NEON_API_BASE}/consumption_history/account",

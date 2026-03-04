@@ -53,6 +53,8 @@ class OpenAIProvider(BaseProvider):
         total_granted:   float | None = None
         total_used_cg:   float | None = None
         total_available: float | None = None
+        is_payg          = False  # True when credit_grants returns 404 (PAYG account)
+        key_invalid      = False
 
         try:
             cg = await client.get(CREDIT_GRANTS_ENDPOINT, headers=headers, timeout=15.0)
@@ -65,6 +67,12 @@ class OpenAIProvider(BaseProvider):
                     "[OpenAI] credit_grants → granted=%.4f used=%.4f available=%.4f",
                     total_granted or 0, total_used_cg or 0, total_available or 0,
                 )
+            elif cg.status_code == 404:
+                # PAYG account — no prepaid credits, endpoint doesn't exist
+                is_payg = True
+                logger.info("[OpenAI] credit_grants 404 → PAYG account")
+            elif cg.status_code in (401, 403):
+                key_invalid = True
         except Exception as exc:
             logger.debug("[OpenAI] credit_grants fetch failed: %s", exc)
 
@@ -122,7 +130,26 @@ class OpenAIProvider(BaseProvider):
                 raw_data     = raw,
             )
 
-        # Both endpoints failed — report auth error
+        # Invalid key
+        if key_invalid:
+            return self._error_snapshot(
+                "Invalid OpenAI API key. Check your key at platform.openai.com/api-keys."
+            )
+
+        # PAYG account with no admin key — key is valid but no spend data available
+        if is_payg:
+            return self._make_snapshot(
+                status   = "ok",
+                raw_data = {
+                    "note": (
+                        "Pay-as-you-go account — no prepaid credits. "
+                        "Add an Admin key (sk-admin-...) as OPENAI_ADMIN_KEY to see 30-day spend."
+                    ),
+                    "key_valid": True,
+                },
+            )
+
+        # Both endpoints failed for unknown reason
         return self._error_snapshot(
             "Could not fetch OpenAI data. "
             "Use a standard API key (sk-...) for credit balance, "

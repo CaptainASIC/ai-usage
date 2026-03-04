@@ -4,7 +4,11 @@ Railway provider — fetches account credit balance via GraphQL API.
 Endpoint: https://backboard.railway.app/graphql/v2
 Auth: Bearer token (generate at railway.app/account/tokens)
 
-The `me` query returns the current user's credit balance in cents.
+The `creditBalance` field lives on the `Customer` type, accessed via:
+  me { workspaces { customer { creditBalance ... } } }
+
+Note: set env var RAILWAY_CREDIT_TOKEN (not RAILWAY_API_KEY, which
+Railway injects automatically into every service).
 """
 
 import logging
@@ -16,13 +20,24 @@ logger = logging.getLogger(__name__)
 
 GRAPHQL_ENDPOINT = "https://backboard.railway.app/graphql/v2"
 
-# Query for account credit balance
+# creditBalance is on Customer, accessed through workspaces
 BALANCE_QUERY = """
-query GetBalance {
+query GetCreditBalance {
   me {
-    creditBalance
     name
     email
+    workspaces {
+      id
+      name
+      customer {
+        creditBalance
+        remainingUsageCreditBalance
+        currentUsage
+        appliedCredits
+        isPrepaying
+        usageLimit
+      }
+    }
   }
 }
 """
@@ -59,46 +74,76 @@ class RailwayProvider(BaseProvider):
 
             if resp.status_code == 401:
                 return self._error_snapshot(
-                    "Invalid Railway token. Generate one at railway.app/account/tokens."
+                    "Invalid Railway token. Generate one at railway.app/account/tokens "
+                    "and set it as RAILWAY_CREDIT_TOKEN."
                 )
 
             resp.raise_for_status()
             data = resp.json()
 
-            if "errors" in data:
+            if "errors" in data and data["errors"]:
                 errors = data["errors"]
-                msg = errors[0].get("message", str(errors)) if errors else "GraphQL error"
+                msg = errors[0].get("message", str(errors))
                 return self._error_snapshot(f"GraphQL error: {msg}")
 
-            me = data.get("data", {}).get("me", {})
-            if not me:
-                return self._error_snapshot("No user data returned from Railway API.")
+            me = data.get("data", {}).get("me") or {}
+            workspaces = me.get("workspaces") or []
 
-            # creditBalance is in cents (USD)
-            credit_cents = me.get("creditBalance")
-            if credit_cents is None:
-                return self._make_snapshot(
-                    status="ok",
-                    raw_data={
-                        "note": "creditBalance not returned — may require a paid plan",
-                        "user": me.get("name") or me.get("email"),
-                    },
+            if not workspaces:
+                return self._error_snapshot(
+                    "No workspaces found on this Railway account."
                 )
 
-            balance_usd = float(credit_cents) / 100.0
+            # Aggregate credit balance across all workspaces
+            total_credit_cents = 0
+            total_usage_cents = 0
+            usage_limit_cents = None
+            workspace_data = []
+
+            for ws in workspaces:
+                customer = ws.get("customer") or {}
+                credit_cents = customer.get("creditBalance") or 0
+                usage_cents = customer.get("currentUsage") or 0
+                remaining_cents = customer.get("remainingUsageCreditBalance") or 0
+                limit_cents = customer.get("usageLimit")
+
+                total_credit_cents += credit_cents
+                total_usage_cents += usage_cents
+                if limit_cents is not None:
+                    usage_limit_cents = (usage_limit_cents or 0) + limit_cents
+
+                workspace_data.append({
+                    "workspace": ws.get("name"),
+                    "credit_balance_cents": credit_cents,
+                    "current_usage_cents": usage_cents,
+                    "remaining_usage_credit_cents": remaining_cents,
+                    "is_prepaying": customer.get("isPrepaying"),
+                })
+
+            balance_usd = float(total_credit_cents) / 100.0
+            usage_usd = float(total_usage_cents) / 100.0
+            limit_usd = float(usage_limit_cents) / 100.0 if usage_limit_cents else None
 
             return self._make_snapshot(
-                remaining_credits=balance_usd,
+                remaining_credits=balance_usd if balance_usd > 0 else None,
+                used_credits=usage_usd if usage_usd > 0 else None,
+                total_credits=limit_usd,
                 status="ok",
                 raw_data={
-                    "credit_balance_cents": credit_cents,
+                    "credit_balance_usd": balance_usd,
+                    "current_usage_usd": usage_usd,
+                    "usage_limit_usd": limit_usd,
                     "user": me.get("name") or me.get("email"),
+                    "workspaces": workspace_data,
                 },
             )
 
         except httpx.TimeoutException:
             return self._error_snapshot("Request timed out reaching Railway API.")
         except httpx.HTTPStatusError as exc:
-            return self._error_snapshot(f"HTTP {exc.response.status_code}: {exc.response.text[:200]}")
+            return self._error_snapshot(
+                f"HTTP {exc.response.status_code}: {exc.response.text[:200]}"
+            )
         except Exception as exc:
+            logger.exception("Unexpected error in RailwayProvider")
             return self._error_snapshot(f"Unexpected error: {exc}")

@@ -149,6 +149,15 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
   const usageMonthly   = typeof raw.usage_monthly        === 'number' ? raw.usage_monthly        : null;
   const noteText       = typeof raw.note                 === 'string' ? raw.note                 : null;
 
+  // ── Manus-specific three-bucket fields ───────────────────────────────────
+  const isManus         = snapshot.provider_id === 'manus';
+  const manusMonthlyUsed  = typeof raw.manus_monthly_used  === 'number' ? raw.manus_monthly_used  : null;
+  const manusMonthlyTotal = typeof raw.manus_monthly_total === 'number' ? raw.manus_monthly_total : null;
+  const manusDailyUsed    = typeof raw.manus_daily_used    === 'number' ? raw.manus_daily_used    : null;
+  const manusDailyTotal   = typeof raw.manus_daily_total   === 'number' ? raw.manus_daily_total   : null;
+  const manusAddonBalance = typeof raw.manus_addon_balance === 'number' ? raw.manus_addon_balance : null;
+  const manusTotalBalance = typeof raw.manus_total_balance === 'number' ? raw.manus_total_balance : null;
+
   // Usage percentage for the progress bar (0–1)
   let usagePct: number | null = null;
   if (remaining !== null && total !== null && total > 0) {
@@ -158,10 +167,12 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
   }
 
   // ── determine primary display mode ────────────────────────────────────────
-  type Mode = 'balance' | 'spend' | 'usage_monthly' | 'used' | 'none';
+  type Mode = 'balance' | 'spend' | 'usage_monthly' | 'used' | 'manus' | 'none';
   let mode: Mode = 'none';
   if (isOk) {
-    if (remaining !== null)           mode = 'balance';
+    if (isManus && (manusMonthlyTotal !== null || manusDailyTotal !== null || manusAddonBalance !== null))
+                                      mode = 'manus';
+    else if (remaining !== null)      mode = 'balance';
     else if (thirtyDaySpend !== null) mode = 'spend';
     else if (usageMonthly !== null)   mode = 'usage_monthly';
     else if (used !== null)           mode = 'used';
@@ -277,8 +288,84 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
           </div>
         )}
 
+        {/* ── Manus three-bucket layout ── */}
+        {mode === 'manus' && (
+          <div className="space-y-3">
+
+            {/* Monthly quota */}
+            {manusMonthlyTotal !== null && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span className="uppercase tracking-wide">Monthly</span>
+                  <span className="tabular-nums font-medium">
+                    {manusMonthlyUsed !== null
+                      ? `${manusMonthlyUsed.toLocaleString()} / ${manusMonthlyTotal.toLocaleString()}`
+                      : `0 / ${manusMonthlyTotal.toLocaleString()}`
+                    }
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                  {manusMonthlyUsed !== null && manusMonthlyTotal > 0 && (
+                    <div
+                      className={clsx('h-full rounded-full transition-all duration-500',
+                        barColor(1 - manusMonthlyUsed / manusMonthlyTotal))}
+                      style={{ width: `${Math.min(100, Math.round((1 - manusMonthlyUsed / manusMonthlyTotal) * 100))}%` }}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Daily refresh */}
+            {manusDailyTotal !== null && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span className="uppercase tracking-wide">Daily Refresh</span>
+                  <span className="tabular-nums font-medium">
+                    {manusDailyUsed !== null
+                      ? `${Math.round(manusDailyUsed).toLocaleString()} / ${manusDailyTotal.toLocaleString()}`
+                      : `0 / ${manusDailyTotal.toLocaleString()}`
+                    }
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                  {manusDailyUsed !== null && manusDailyTotal > 0 && (
+                    <div
+                      className={clsx('h-full rounded-full transition-all duration-500',
+                        barColor(1 - manusDailyUsed / manusDailyTotal))}
+                      style={{ width: `${Math.min(100, Math.round((1 - manusDailyUsed / manusDailyTotal) * 100))}%` }}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Add-on balance */}
+            {manusAddonBalance !== null && (
+              <div className="flex justify-between text-xs text-gray-400 pt-0.5">
+                <span className="uppercase tracking-wide">Add-on Credits</span>
+                <span className="tabular-nums font-semibold text-blue-400">
+                  {manusAddonBalance.toLocaleString()}
+                </span>
+              </div>
+            )}
+
+            {/* Total balance */}
+            {manusTotalBalance !== null && (
+              <div className="flex justify-between text-xs text-gray-500 border-t border-gray-800/60 pt-2">
+                <span>Total balance</span>
+                <span className={clsx('tabular-nums font-semibold',
+                  manusMonthlyTotal && balanceColor(manusTotalBalance, manusMonthlyTotal + (manusAddonBalance ?? 0)))
+                }>
+                  {manusTotalBalance.toLocaleString()} cr
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Usage progress bar */}
-        {isOk && usagePct !== null && (
+        {isOk && mode !== 'manus' && usagePct !== null && (
           <div className="space-y-1 pt-1">
             <div className="flex justify-between text-xs text-gray-600">
               <span>{Math.round(usagePct * 100)}% remaining</span>

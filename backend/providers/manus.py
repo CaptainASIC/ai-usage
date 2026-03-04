@@ -1,34 +1,39 @@
 """
-Manus provider - fetches credits via the Manus Connect RPC API.
+Manus provider — fetches credits via the Manus Connect RPC API.
 
 Endpoints (Connect RPC, POST, content-type: application/json):
 
   POST https://api.manus.im/user.v1.UserService/WebdevUsageInfo
     body: {}
-    → { cloudRefreshUsage, cloudRefreshUsageBudget, aiRefreshUsageBudget, ... }
+    → {
+        cloudRefreshUsage: float,       # daily refresh units consumed (e.g. 0.38 of 10)
+        cloudRefreshUsageBudget: int,   # daily refresh budget in cloud units (10 = 300 credits)
+        aiRefreshUsageBudget: int,
+        integrationsRefreshUsageBudget: int,
+        bindCard: bool,
+      }
 
   POST https://api.manus.im/user.v1.UserService/ListUserCreditsLog
     body: {"page": 1, "pageSize": 100}
-    → { logs: [{credits, title, createAt, type, ...}], total }
-      credits: positive = earned/refund, negative = spent
-      total: number of log entries (NOT credit balance)
+    → {
+        logs: [{sessionId, title, createAt, credits (int), type}, ...],
+        total: int   ← number of log entries, NOT a credit balance
+      }
+      credits: negative = spent, positive = refund/earned
 
 Authentication: Bearer JWT token (set MANUS_API_KEY in env).
 
 Optional env vars:
-  MANUS_TOTAL_CREDITS   - your known total credit balance (integer)
-                          Set this to the value shown on manus.im/billing.
-                          Used as the denominator for the progress bar.
+  MANUS_TOTAL_CREDITS   - current total credit balance (from manus.im/billing)
+                          e.g. 142363  (free + monthly + add-on combined)
+  MANUS_ADDON_CREDITS   - add-on credit bucket balance (from manus.im/billing)
+                          e.g. 141231
   MANUS_MONTHLY_CREDITS - monthly plan allotment (default 40000 for Pro plan)
+  MANUS_DAILY_CREDITS   - daily refresh allotment (default 300 for Pro plan)
 
-To get your JWT token:
-1. Log in to manus.im in your browser
-2. Open DevTools (F12) → Network tab
-3. Find any request to api.manus.im → Headers → Authorization
-4. Copy the value after "Bearer " — that is your JWT token
-
-Set MANUS_API_KEY=<your JWT token> in the backend environment.
-The token typically expires after ~90 days (check the 'exp' claim).
+The Manus API does not expose the monthly used/remaining or add-on balance
+directly — these must be configured via env vars from the billing page.
+The daily refresh ratio IS available from WebdevUsageInfo.
 """
 
 import logging
@@ -40,12 +45,15 @@ from providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
-MANUS_API_BASE = "https://api.manus.im"
+MANUS_API_BASE       = "https://api.manus.im"
 USAGE_INFO_ENDPOINT  = f"{MANUS_API_BASE}/user.v1.UserService/WebdevUsageInfo"
 CREDITS_LOG_ENDPOINT = f"{MANUS_API_BASE}/user.v1.UserService/ListUserCreditsLog"
 
-# Pro plan monthly allotment (override with MANUS_MONTHLY_CREDITS env var)
+# Pro plan defaults
 DEFAULT_MONTHLY_CREDITS = 40_000
+DEFAULT_DAILY_CREDITS   = 300
+# Cloud refresh units per day on Pro plan (10 units = 300 credits)
+CLOUD_UNITS_PER_DAY     = 10
 
 
 class ManusProvider(BaseProvider):
@@ -100,6 +108,7 @@ class ManusProvider(BaseProvider):
                 )
             if resp.status_code == 200:
                 usage_data = resp.json()
+                logger.info("[Manus] WebdevUsageInfo data: %s", usage_data)
         except httpx.TimeoutException:
             logger.warning("[Manus] WebdevUsageInfo timed out")
         except Exception as e:
@@ -128,41 +137,41 @@ class ManusProvider(BaseProvider):
 
         return self._build_snapshot(usage_data, log_data)
 
+    def _get_env_int(self, key: str, default: int | None = None) -> int | None:
+        val = os.environ.get(key, "").strip()
+        if val:
+            try:
+                return int(val)
+            except ValueError:
+                logger.warning("[Manus] %s is not a valid integer: %s", key, val)
+        return default
+
     def _build_snapshot(
         self,
         usage_data: dict | None,
         log_data:   dict | None,
     ) -> BalanceSnapshot:
         """
-        Build a BalanceSnapshot using raw credit integers.
+        Build a BalanceSnapshot with three credit buckets exposed in raw_data:
 
-        - remaining_credits = MANUS_TOTAL_CREDITS env var (known balance from billing page)
-          If not set, falls back to net sum of log entries (approximate).
-        - total_credits     = MANUS_TOTAL_CREDITS (for progress bar denominator)
-        - used_credits      = sum of negative log entries (spent this period)
-        - currency          = "credits"  ← tells the frontend to format as integers
+          manus_monthly_used      - credits spent this month (from log sum)
+          manus_monthly_total     - monthly allotment (MANUS_MONTHLY_CREDITS or 40000)
+          manus_daily_used        - daily refresh credits used (from cloudRefreshUsage ratio)
+          manus_daily_total       - daily refresh allotment (MANUS_DAILY_CREDITS or 300)
+          manus_addon_balance     - add-on credit balance (MANUS_ADDON_CREDITS env var)
+          manus_total_balance     - total balance (MANUS_TOTAL_CREDITS env var)
+
+        The primary remaining_credits / total_credits fields show the total balance
+        for the progress bar on the card header.
         """
         # ── Read env-var overrides ──────────────────────────────────────────
-        total_from_env: int | None = None
-        env_val = os.environ.get("MANUS_TOTAL_CREDITS", "").strip()
-        if env_val:
-            try:
-                total_from_env = int(env_val)
-            except ValueError:
-                logger.warning("[Manus] MANUS_TOTAL_CREDITS is not a valid integer: %s", env_val)
+        total_balance  = self._get_env_int("MANUS_TOTAL_CREDITS")
+        addon_balance  = self._get_env_int("MANUS_ADDON_CREDITS")
+        monthly_total  = self._get_env_int("MANUS_MONTHLY_CREDITS", DEFAULT_MONTHLY_CREDITS)
+        daily_total    = self._get_env_int("MANUS_DAILY_CREDITS",   DEFAULT_DAILY_CREDITS)
 
-        monthly_credits = DEFAULT_MONTHLY_CREDITS
-        monthly_val = os.environ.get("MANUS_MONTHLY_CREDITS", "").strip()
-        if monthly_val:
-            try:
-                monthly_credits = int(monthly_val)
-            except ValueError:
-                pass
-
-        # ── Parse log entries ───────────────────────────────────────────────
-        net_from_log: int | None = None
-        spent_credits: int = 0
-        earned_credits: int = 0
+        # ── Parse log entries for monthly spend ─────────────────────────────
+        monthly_spent: int = 0
         log_entry_count: int = 0
 
         if log_data and isinstance(log_data.get("logs"), list):
@@ -170,54 +179,49 @@ class ManusProvider(BaseProvider):
             log_entry_count = log_data.get("total", len(logs))
             for entry in logs:
                 c = entry.get("credits")
-                if isinstance(c, (int, float)):
-                    c = int(c)
-                    if c < 0:
-                        spent_credits += abs(c)
-                    else:
-                        earned_credits += c
-            net_from_log = earned_credits - spent_credits
+                if isinstance(c, (int, float)) and c < 0:
+                    monthly_spent += abs(int(c))
 
-        # ── Parse usage quota ───────────────────────────────────────────────
-        cloud_used:   float | None = None
-        cloud_budget: int   | None = None
+        # ── Parse daily refresh from WebdevUsageInfo ────────────────────────
+        daily_used: float | None = None
         if usage_data:
-            cloud_used   = usage_data.get("cloudRefreshUsage")
-            cloud_budget = usage_data.get("cloudRefreshUsageBudget")
+            cloud_used   = usage_data.get("cloudRefreshUsage")   # e.g. 0.38
+            cloud_budget = usage_data.get("cloudRefreshUsageBudget")  # e.g. 10
+            if cloud_used is not None and cloud_budget and cloud_budget > 0:
+                # Convert cloud units to credits:
+                # budget units map to daily_total credits proportionally
+                daily_used = round((cloud_used / cloud_budget) * (daily_total or DEFAULT_DAILY_CREDITS), 1)
 
-        # ── Decide remaining / total ────────────────────────────────────────
-        # Prefer the env-var total (authoritative from billing page).
-        # Fall back to net log sum (approximate — only last 100 entries).
-        remaining = float(total_from_env) if total_from_env is not None else (
-            float(net_from_log) if net_from_log is not None else None
-        )
-        total = float(total_from_env) if total_from_env is not None else None
+        # ── Derive remaining ────────────────────────────────────────────────
+        # Primary display: total balance from env var (authoritative)
+        remaining = float(total_balance) if total_balance is not None else None
+        total     = float(total_balance) if total_balance is not None else None
 
-        if remaining is None and cloud_used is None:
+        if remaining is None and daily_used is None and monthly_spent == 0:
             return self._error_snapshot(
-                "Could not parse Manus credits data. "
+                "Could not parse Manus credits. "
                 "Set MANUS_TOTAL_CREDITS in backend env to your balance from manus.im/billing."
             )
 
-        raw: dict = {}
-        if usage_data:
-            raw.update({
-                "cloud_refresh_used":   cloud_used,
-                "cloud_refresh_budget": cloud_budget,
-                "ai_refresh_budget":    usage_data.get("aiRefreshUsageBudget"),
-            })
-        raw.update({
-            "monthly_allotment":  monthly_credits,
-            "spent_this_period":  spent_credits,
-            "earned_this_period": earned_credits,
-            "log_entry_count":    log_entry_count,
-            "total_from_env":     total_from_env,
-        })
+        raw: dict = {
+            # Monthly quota bucket
+            "manus_monthly_used":   monthly_spent,
+            "manus_monthly_total":  monthly_total,
+            # Daily refresh bucket
+            "manus_daily_used":     daily_used,
+            "manus_daily_total":    daily_total,
+            # Add-on bucket
+            "manus_addon_balance":  addon_balance,
+            # Total balance
+            "manus_total_balance":  total_balance,
+            # Metadata
+            "log_entry_count":      log_entry_count,
+        }
 
         return self._make_snapshot(
             balance_usd=None,
             remaining_credits=remaining,
-            used_credits=float(spent_credits) if spent_credits else None,
+            used_credits=float(monthly_spent) if monthly_spent else None,
             total_credits=total,
             currency="credits",
             status="ok",

@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="frontend/public/logo.png" alt="Reckoner" width="120" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="frontend/public/reckoner-white.png" />
+    <source media="(prefers-color-scheme: light)" srcset="frontend/public/reckoner-dark.png" />
+    <img src="frontend/public/reckoner-dark.png" alt="Reckoner" width="120" />
+  </picture>
 </p>
 
 <h1 align="center">Reckoner</h1>

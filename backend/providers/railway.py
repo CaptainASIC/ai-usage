@@ -146,7 +146,6 @@ class RailwayProvider(BaseProvider):
                     "credit_balance_usd": balance_usd,
                     "current_usage_usd": usage_usd,
                     "usage_limit_usd": limit_usd,
-                    "user": me.get("name") or me.get("email"),
                     "workspaces": workspace_data,
                 },
             )

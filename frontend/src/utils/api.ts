@@ -3,6 +3,7 @@
  */
 
 import type {
+  AuthStatus,
   DashboardResponse,
   ProviderMeta,
   ProviderSettings,
@@ -17,11 +18,52 @@ const BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : '/api';
 
+// ── Token management ─────────────────────────────────────────────────────────
+
+const TOKEN_KEY = 'reckoner_token';
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+/** Callback invoked when a 401 is received — set by useAuth to trigger re-login. */
+let onUnauthorized: (() => void) | null = null;
+
+export function setOnUnauthorized(cb: (() => void) | null): void {
+  onUnauthorized = cb;
+}
+
+// ── Request helper ───────────────────────────────────────────────────────────
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+
+  const token = getToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
+
+  if (response.status === 401) {
+    clearToken();
+    onUnauthorized?.();
+    throw new Error('Authentication required');
+  }
 
   if (!response.ok) {
     const error = await response.text();
@@ -73,4 +115,14 @@ export const api = {
 
   /** Health check */
   health: () => request<HealthResponse>('/health'),
+
+  /** Get auth status (always public) */
+  authStatus: () => request<AuthStatus>('/auth/status'),
+
+  /** Login with password */
+  login: (password: string) =>
+    request<{ token: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
 };

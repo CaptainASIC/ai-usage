@@ -2,7 +2,7 @@
  * SummaryBar - top bar showing total balance, refresh button, and settings link.
  */
 
-import { RefreshCw, Clock, Settings } from 'lucide-react';
+import { RefreshCw, Clock, Settings, LogIn, LogOut } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { DashboardResponse } from '../types';
 import { formatUSD, formatRelativeTime } from '../utils/format';
@@ -14,6 +14,10 @@ interface SummaryBarProps {
   lastFetch: Date | null;
   onRefresh: () => void;
   onSettingsClick: () => void;
+  authEnabled?: boolean;
+  authenticated?: boolean;
+  onLoginClick?: () => void;
+  onLogout?: () => void;
 }
 
 export function SummaryBar({
@@ -23,6 +27,10 @@ export function SummaryBar({
   lastFetch,
   onRefresh,
   onSettingsClick,
+  authEnabled,
+  authenticated,
+  onLoginClick,
+  onLogout,
 }: SummaryBarProps) {
   const providers  = data?.providers ?? [];
   const configured = providers.filter((p) => p.status === 'ok' || p.status === 'error').length;
@@ -108,6 +116,37 @@ export function SummaryBar({
             <Settings size={12} />
             <span className="hidden sm:inline">Settings</span>
           </button>
+
+          {/* Auth button: Sign In (when dashboard is public) or Sign Out */}
+          {authEnabled && !authenticated && onLoginClick && (
+            <button
+              onClick={onLoginClick}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium',
+                'bg-blue-600 hover:bg-blue-500 text-white',
+                'transition-all duration-150',
+              )}
+              title="Sign in to manage settings"
+            >
+              <LogIn size={12} />
+              <span className="hidden sm:inline">Sign In</span>
+            </button>
+          )}
+          {authEnabled && authenticated && onLogout && (
+            <button
+              onClick={onLogout}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium',
+                'bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200',
+                'border border-gray-700/60 hover:border-gray-600',
+                'transition-all duration-150',
+              )}
+              title="Sign out"
+            >
+              <LogOut size={12} />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

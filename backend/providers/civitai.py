@@ -79,6 +79,7 @@ class CivitAIProvider(BaseProvider):
                 response = await client.get(endpoint, headers=headers)
                 if response.status_code == 200:
                     data = response.json()
+                    logger.info(f"[CivitAI] {endpoint.split('?')[0].split('/')[-1]} response: {data}")
                     balance = self._extract_buzz(data)
                     if balance is not None:
                         raw = data if isinstance(data, dict) else {"batch": data}

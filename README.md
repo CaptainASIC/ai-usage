@@ -1,8 +1,28 @@
-# Reckoner
+<p align="center">
+  <img src="frontend/public/logo.png" alt="Reckoner" width="120" />
+</p>
 
-A fast, single-page dashboard for monitoring AI service credits, cloud billing, and account balances across OpenRouter, OpenAI, Anthropic, xAI, Mistral, Groq, Manus, Plaud, Railway, Neon, RunPod, mem0, AWS, GCP, Vercel, and more.
+<h1 align="center">Reckoner</h1>
 
-Live at [reckoner.captainasic.dev](https://reckoner.captainasic.dev)
+<p align="center">
+  A fast, single-page dashboard for monitoring AI service credits, cloud billing, and account balances across OpenRouter, OpenAI, Anthropic, xAI, Mistral, Groq, Manus, Plaud, Railway, Neon, RunPod, mem0, AWS, GCP, Vercel, and more.
+</p>
+
+<p align="center">
+  <a href="https://github.com/CaptainASIC/Reckoner/blob/main/LICENSE"><img src="https://img.shields.io/github/license/CaptainASIC/Reckoner?color=blue" alt="License" /></a>
+  <a href="https://github.com/CaptainASIC/Reckoner/releases"><img src="https://img.shields.io/github/v/release/CaptainASIC/Reckoner?include_prereleases&color=green" alt="Release" /></a>
+  <a href="https://github.com/CaptainASIC/Reckoner/stargazers"><img src="https://img.shields.io/github/stars/CaptainASIC/Reckoner" alt="Stars" /></a>
+  <a href="https://github.com/CaptainASIC/Reckoner/issues"><img src="https://img.shields.io/github/issues/CaptainASIC/Reckoner" alt="Issues" /></a>
+  <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/react-19-61dafb?logo=react&logoColor=white" alt="React" />
+  <img src="https://img.shields.io/badge/fastapi-0.115+-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
+  <a href="https://ko-fi.com/captasic"><img src="https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white" alt="Ko-fi" /></a>
+  <a href="https://github.com/sponsors/CaptainASIC"><img src="https://img.shields.io/badge/Sponsor-♥-ea4aaa?logo=github-sponsors&logoColor=white" alt="Sponsor" /></a>
+</p>
+
+<p align="center">
+  <a href="https://reckoner.captainasic.dev">Live Demo</a> · <a href="#quick-start">Quick Start</a> · <a href="#provider-support">Providers</a> · <a href="#adding-a-new-provider">Add Your Own</a>
+</p>
 
 ## Features
 
@@ -254,4 +274,4 @@ Interactive docs available at `/docs` (FastAPI Swagger UI).
 
 ## License
 
-MIT
+This project is licensed under the [GNU General Public License v3.0](LICENSE).

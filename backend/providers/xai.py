@@ -22,8 +22,8 @@ from providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
-BALANCE_ENDPOINT = "https://api.x.ai/v1/billing/teams/{team_id}/prepaid/balance"
-USAGE_ENDPOINT = "https://api.x.ai/v1/billing/teams/{team_id}/usage"
+BALANCE_ENDPOINT = "https://management-api.x.ai/v1/billing/teams/{team_id}/prepaid/balance"
+USAGE_ENDPOINT = "https://management-api.x.ai/v1/billing/teams/{team_id}/usage"
 
 
 class XAIProvider(BaseProvider):

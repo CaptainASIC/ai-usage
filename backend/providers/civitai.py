@@ -74,63 +74,57 @@ class CivitAIProvider(BaseProvider):
             f"{CIVITAI_BASE}/api/trpc/buzz.getUserAccount?input={_AUTHED_INPUT}",
         ]
 
-        for endpoint in candidate_endpoints:
-            try:
-                response = await client.get(endpoint, headers=headers)
-                if response.status_code == 200:
-                    data = response.json()
-                    logger.info(f"[CivitAI] {endpoint.split('?')[0].split('/')[-1]} response: {data}")
-                    balance = self._extract_buzz(data)
-                    if balance is not None:
-                        raw = data if isinstance(data, dict) else {"batch": data}
-                        return self._make_snapshot(
-                            balance_usd=None,
-                            remaining_credits=balance,
-                            currency="buzz",
-                            raw_data={"endpoint": endpoint, **raw},
-                        )
-            except Exception:
-                continue
+        # Try getBuzzAccount first (has per-type breakdown)
+        try:
+            url = f"{CIVITAI_BASE}/api/trpc/buzz.getBuzzAccount?input={_AUTHED_INPUT}"
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                inner = data["result"]["data"]["json"]
+                # Shape: {"blue": N, "green": N, "yellow": N}
+                yellow = inner.get("yellow", 0)
+                blue = inner.get("blue", 0)
+                green = inner.get("green", 0)
+                total_buzz = yellow + blue + green
+                return self._make_snapshot(
+                    balance_usd=None,
+                    remaining_credits=float(total_buzz),
+                    currency="buzz",
+                    raw_data={
+                        "endpoint": "buzz.getBuzzAccount",
+                        "yellow": yellow,
+                        "blue": blue,
+                        "green": green,
+                    },
+                )
+        except Exception as exc:
+            logger.debug(f"[CivitAI] getBuzzAccount failed: {exc}")
+
+        # Fallback: getUserAccount (returns list of accounts)
+        try:
+            url = f"{CIVITAI_BASE}/api/trpc/buzz.getUserAccount?input={_AUTHED_INPUT}"
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                accounts = data["result"]["data"]["json"]
+                # Shape: [{"id": N, "balance": N, "lifetimeBalance": N, "accountType": "yellow"}, ...]
+                if isinstance(accounts, list) and accounts:
+                    total_buzz = sum(a.get("balance", 0) for a in accounts)
+                    lifetime = sum(a.get("lifetimeBalance", 0) for a in accounts)
+                    return self._make_snapshot(
+                        balance_usd=None,
+                        remaining_credits=float(total_buzz),
+                        currency="buzz",
+                        raw_data={
+                            "endpoint": "buzz.getUserAccount",
+                            "accounts": accounts,
+                            "lifetime_balance": lifetime,
+                        },
+                    )
+        except Exception as exc:
+            logger.debug(f"[CivitAI] getUserAccount failed: {exc}")
 
         return self._error_snapshot(
             "CivitAI has no public billing API. "
             "Provide session cookies from civitai.com DevTools to attempt scraping."
         )
-
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _extract_buzz(data) -> float | None:
-        """Walk common TRPC response shapes to find a buzz balance.
-
-        Handles both batch responses (list) and single responses (dict).
-        Batch shape:  [{"result":{"data":{"json":{...}}}}]
-        Single shape: {"result":{"data":{"json":{...}}}}
-        """
-        candidates = []
-
-        # Batch response: unwrap the first element
-        if isinstance(data, list) and data:
-            candidates.append(data[0])
-        if isinstance(data, dict):
-            candidates.append(data)
-
-        for item in candidates:
-            # Standard tRPC envelope: result.data.json.<key>
-            try:
-                inner = item["result"]["data"]["json"]
-                for key in ("balance", "lifetimeBalance", "buzz", "total", "amount"):
-                    if key in inner:
-                        return float(inner[key])
-            except (KeyError, TypeError):
-                pass
-
-            # Flat response fallback
-            if isinstance(item, dict):
-                for key in ("balance", "buzz", "credits", "amount", "total"):
-                    if key in item:
-                        try:
-                            return float(item[key])
-                        except (ValueError, TypeError):
-                            pass
-
-        return None

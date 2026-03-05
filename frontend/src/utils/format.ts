@@ -13,6 +13,16 @@ export function formatCredits(value: number | null | undefined): string {
 }
 
 /**
+ * Format a Buzz value for display (e.g. "58,611 buzz").
+ */
+export function formatBuzz(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+  }).format(Math.round(value)) + ' buzz';
+}
+
+/**
  * Format a USD dollar amount for display.
  */
 export function formatUSD(value: number | null | undefined): string {

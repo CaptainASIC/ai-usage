@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { BalanceSnapshot } from '../types';
-import { formatUSD, formatCredits, formatRelativeTime } from '../utils/format';
+import { formatUSD, formatCredits, formatBuzz, formatRelativeTime } from '../utils/format';
 import { api } from '../utils/api';
 
 interface ProviderCardProps {
@@ -166,6 +166,12 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
   const plaudPlanName        = typeof raw.plaud_plan_name        === 'string' ? raw.plaud_plan_name        : null;
   const plaudPlanExpires     = typeof raw.plaud_plan_expires     === 'string' ? raw.plaud_plan_expires     : null;
 
+  // ── CivitAI-specific buzz type fields ──────────────────────────────────
+  const isCivitai          = snapshot.provider_id === 'civitai';
+  const civitaiYellow      = typeof raw.yellow === 'number' ? raw.yellow : null;
+  const civitaiBlue        = typeof raw.blue   === 'number' ? raw.blue   : null;
+  const civitaiGreen       = typeof raw.green  === 'number' ? raw.green  : null;
+
   // ── Manus-specific three-bucket fields ───────────────────────────────────
   const isManus         = snapshot.provider_id === 'manus';
   const manusMonthlyUsed      = typeof raw.manus_monthly_used      === 'number' ? raw.manus_monthly_used      : null;
@@ -186,10 +192,12 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
   }
 
   // ── determine primary display mode ────────────────────────────────────────
-  type Mode = 'balance' | 'spend' | 'usage_monthly' | 'used' | 'manus' | 'plaud' | 'none';
+  type Mode = 'balance' | 'spend' | 'usage_monthly' | 'used' | 'manus' | 'plaud' | 'civitai' | 'none';
   let mode: Mode = 'none';
   if (isOk) {
-    if (isPlaud && plaudTotalFiles !== null)
+    if (isCivitai && civitaiYellow !== null)
+                                      mode = 'civitai';
+    else if (isPlaud && plaudTotalFiles !== null)
                                       mode = 'plaud';
     else if (isManus && (manusMonthlyTotal !== null || manusDailyTotal !== null || manusAddonBalance !== null))
                                       mode = 'manus';
@@ -306,6 +314,52 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
             <p className="text-xs text-gray-500 uppercase tracking-wide">Balance</p>
             <p className="text-2xl font-bold tabular-nums text-gray-500">—</p>
             <p className="text-xs text-gray-600">No data returned for this key type.</p>
+          </div>
+        )}
+
+        {/* ── CivitAI buzz breakdown layout ── */}
+        {mode === 'civitai' && (
+          <div className="space-y-3">
+
+            {/* Yellow Buzz — primary */}
+            {civitaiYellow !== null && (
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Yellow Buzz</p>
+                <p className="text-2xl font-bold tabular-nums text-amber-400">
+                  {formatBuzz(civitaiYellow)}
+                </p>
+              </div>
+            )}
+
+            {/* Blue + Green side by side */}
+            <div className="grid grid-cols-2 gap-3">
+              {civitaiBlue !== null && (
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Blue Buzz</p>
+                  <p className="text-lg font-bold tabular-nums text-blue-400">
+                    {formatBuzz(civitaiBlue)}
+                  </p>
+                </div>
+              )}
+              {civitaiGreen !== null && (
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Green Buzz</p>
+                  <p className="text-lg font-bold tabular-nums text-emerald-400">
+                    {formatBuzz(civitaiGreen)}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Total */}
+            {civitaiYellow !== null && (
+              <div className="flex justify-between text-xs text-gray-500 border-t border-gray-800/60 pt-2">
+                <span>Total</span>
+                <span className="tabular-nums font-semibold text-gray-300">
+                  {formatBuzz((civitaiYellow ?? 0) + (civitaiBlue ?? 0) + (civitaiGreen ?? 0))}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -443,7 +497,7 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
         )}
 
         {/* Usage progress bar */}
-        {isOk && mode !== 'manus' && usagePct !== null && (
+        {isOk && mode !== 'manus' && mode !== 'civitai' && usagePct !== null && (
           <div className="space-y-1 pt-1">
             <div className="flex justify-between text-xs text-gray-600">
               <span>{Math.round(usagePct * 100)}% remaining</span>

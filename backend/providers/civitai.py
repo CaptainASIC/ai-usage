@@ -12,6 +12,7 @@ To get credentials:
 """
 
 import logging
+import urllib.parse
 
 import httpx
 
@@ -21,6 +22,10 @@ from providers.base import BaseProvider
 logger = logging.getLogger(__name__)
 
 CIVITAI_BASE = "https://civitai.com"
+COOKIE_NAME = "__Secure-civitai-token"
+
+# tRPC v10 batch input format
+_BATCH_INPUT = urllib.parse.quote('{"0":{"json":null}}')
 
 
 class CivitAIProvider(BaseProvider):
@@ -33,26 +38,44 @@ class CivitAIProvider(BaseProvider):
     def is_configured(self) -> bool:
         return bool(self.credentials.session_cookie)
 
+    @staticmethod
+    def _normalize_cookie(raw: str) -> str:
+        """Ensure the cookie string contains the expected cookie name.
+
+        Users may paste just the token value or the full
+        ``__Secure-civitai-token=<value>`` string.
+        """
+        raw = raw.strip()
+        if COOKIE_NAME in raw:
+            return raw
+        return f"{COOKIE_NAME}={raw}"
+
     async def fetch_balance(self) -> BalanceSnapshot:
         """Attempt to fetch CivitAI Buzz balance via TRPC endpoints."""
         if not self.is_configured():
             return self._unconfigured_snapshot()
 
+        cookie = self._normalize_cookie(self.credentials.session_cookie)
         client = await self.get_client()
         headers = {
-            "Cookie": self.credentials.session_cookie,
+            "Cookie": cookie,
             "Accept": "application/json",
+            "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
             "Referer": "https://civitai.com/user/buzz-dashboard",
+            "x-trpc-source": "nextjs-react",
         }
 
-        # TRPC endpoints that may expose the Buzz balance.
-        # CivitAI uses tRPC; the response shape is:
-        #   {"result": {"data": {"json": { ... }}}}
+        # tRPC v10 endpoints — try batch format first, then plain.
+        # Batch response shape: [{"result":{"data":{"json":{...}}}}]
+        # Plain response shape: {"result":{"data":{"json":{...}}}}
         candidate_endpoints = [
+            # Batch format (primary)
+            f"{CIVITAI_BASE}/api/trpc/buzz.getBuzzAccount?batch=1&input={_BATCH_INPUT}",
+            f"{CIVITAI_BASE}/api/trpc/buzz.getUserAccount?batch=1&input={_BATCH_INPUT}",
+            # Plain format (fallback)
             f"{CIVITAI_BASE}/api/trpc/buzz.getBuzzAccount?input=%7B%7D",
             f"{CIVITAI_BASE}/api/trpc/buzz.getUserAccount?input=%7B%7D",
-            f"{CIVITAI_BASE}/api/trpc/buzz.getAccountSummary?input=%7B%7D",
         ]
 
         for endpoint in candidate_endpoints:
@@ -62,11 +85,12 @@ class CivitAIProvider(BaseProvider):
                     data = response.json()
                     balance = self._extract_buzz(data)
                     if balance is not None:
+                        raw = data if isinstance(data, dict) else {"batch": data}
                         return self._make_snapshot(
                             balance_usd=None,
                             remaining_credits=balance,
                             currency="buzz",
-                            raw_data={"endpoint": endpoint, **data},
+                            raw_data={"endpoint": endpoint, **raw},
                         )
             except Exception:
                 continue
@@ -78,27 +102,38 @@ class CivitAIProvider(BaseProvider):
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _extract_buzz(data: dict) -> float | None:
+    def _extract_buzz(data) -> float | None:
         """Walk common TRPC response shapes to find a buzz balance.
 
-        Tries the standard tRPC envelope first, then falls back to
-        scanning top-level keys.
+        Handles both batch responses (list) and single responses (dict).
+        Batch shape:  [{"result":{"data":{"json":{...}}}}]
+        Single shape: {"result":{"data":{"json":{...}}}}
         """
-        # Standard tRPC envelope: result.data.json.<key>
-        try:
-            inner = data["result"]["data"]["json"]
-            for key in ("balance", "lifetimeBalance", "buzz", "total", "amount"):
-                if key in inner:
-                    return float(inner[key])
-        except (KeyError, TypeError):
-            pass
+        candidates = []
 
-        # Flat response fallback
-        for key in ("balance", "buzz", "credits", "amount", "total"):
-            if key in data:
-                try:
-                    return float(data[key])
-                except (ValueError, TypeError):
-                    pass
+        # Batch response: unwrap the first element
+        if isinstance(data, list) and data:
+            candidates.append(data[0])
+        if isinstance(data, dict):
+            candidates.append(data)
+
+        for item in candidates:
+            # Standard tRPC envelope: result.data.json.<key>
+            try:
+                inner = item["result"]["data"]["json"]
+                for key in ("balance", "lifetimeBalance", "buzz", "total", "amount"):
+                    if key in inner:
+                        return float(inner[key])
+            except (KeyError, TypeError):
+                pass
+
+            # Flat response fallback
+            if isinstance(item, dict):
+                for key in ("balance", "buzz", "credits", "amount", "total"):
+                    if key in item:
+                        try:
+                            return float(item[key])
+                        except (ValueError, TypeError):
+                            pass
 
         return None

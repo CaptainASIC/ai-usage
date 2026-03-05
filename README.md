@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/CaptainASIC/Reckoner/blob/main/LICENSE"><img src="https://img.shields.io/github/license/CaptainASIC/Reckoner?color=blue" alt="License" /></a>
-  <a href="https://github.com/CaptainASIC/Reckoner/releases"><img src="https://img.shields.io/github/v/release/CaptainASIC/Reckoner?include_prereleases&color=green" alt="Release" /></a>
-  <a href="https://github.com/CaptainASIC/Reckoner/stargazers"><img src="https://img.shields.io/github/stars/CaptainASIC/Reckoner" alt="Stars" /></a>
-  <a href="https://github.com/CaptainASIC/Reckoner/issues"><img src="https://img.shields.io/github/issues/CaptainASIC/Reckoner" alt="Issues" /></a>
+  <a href="https://github.com/CaptainASIC/reckoner/blob/main/LICENSE"><img src="https://img.shields.io/github/license/CaptainASIC/reckoner?color=blue" alt="License" /></a>
+  <a href="https://github.com/CaptainASIC/reckoner/releases"><img src="https://img.shields.io/github/v/release/CaptainASIC/reckoner?include_prereleases&color=green" alt="Release" /></a>
+  <a href="https://github.com/CaptainASIC/reckoner/stargazers"><img src="https://img.shields.io/github/stars/CaptainASIC/reckoner" alt="Stars" /></a>
+  <a href="https://github.com/CaptainASIC/reckoner/issues"><img src="https://img.shields.io/github/issues/CaptainASIC/reckoner" alt="Issues" /></a>
   <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/react-19-61dafb?logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/fastapi-0.115+-009688?logo=fastapi&logoColor=white" alt="FastAPI" />

@@ -51,6 +51,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
   firecrawl:  '/logos/firecrawl.png',
   aws:        '/logos/aws.png',
   gcp:        '/logos/gcp.png',
+  civitai:    '/logos/civitai.png',
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -72,6 +73,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   firecrawl:  'from-orange-500 to-red-500',
   aws:        'from-orange-400 to-yellow-500',
   gcp:        'from-blue-400 to-red-400',
+  civitai:    'from-blue-500 to-cyan-500',
 };
 
 function ProviderLogo({ id, name }: { id: string; name: string }) {

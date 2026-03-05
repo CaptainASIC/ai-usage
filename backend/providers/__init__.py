@@ -17,6 +17,7 @@ from providers.manus import ManusProvider
 from providers.warp import WarpProvider
 from providers.plaud import PlaudProvider
 from providers.gemini import GeminiProvider
+from providers.civitai import CivitAIProvider
 
 # Cloud Providers
 from providers.railway import RailwayProvider
@@ -155,9 +156,21 @@ AI_PROVIDERS = {
         "refresh_interval": 300,
         "note": "No balance endpoint — shows key validity and available models.",
     },
+    "civitai": {
+        "class": CivitAIProvider,
+        "name": "CivitAI",
+        "category": "ai",
+        "auth_type": "session_cookie",
+        "auth_fields": [
+            {"key": "session_cookie", "label": "Session Cookie", "placeholder": "Paste cookie string", "secret": True},
+        ],
+        "auth_help": "Copy session cookies from civitai.com → DevTools → Application → Cookies",
+        "tier": 2,
+        "refresh_interval": 1800,
+    },
 }
 
-# ─── Cloud Provider Registry ─────────────────────────────────────────────────
+# ─── Cloud Provider Registry
 
 CLOUD_PROVIDERS = {
     "railway": {
@@ -284,6 +297,7 @@ __all__ = [
     "WarpProvider",
     "PlaudProvider",
     "GeminiProvider",
+    "CivitAIProvider",
     # Cloud
     "RailwayProvider",
     "VercelProvider",

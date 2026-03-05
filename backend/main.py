@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Reckoner API",
     description="Backend API for monitoring cloud AI service balances and usage",
-    version="2.0.0",
+    version="1.0.0",
     lifespan=lifespan,
     redirect_slashes=False,  # Prevent 301 redirects that break fetch() calls
 )
@@ -110,7 +110,7 @@ app.include_router(
 async def root():
     return {
         "service": "Reckoner API",
-        "version": "2.0.0",
+        "version": "1.0.0",
         "docs": "/docs",
         "health": "/api/health",
     }

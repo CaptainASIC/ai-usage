@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from auth import require_auth, require_auth_if_protected
+from auth import auth_enabled, require_auth, require_auth_if_protected
 from routers import auth, credits, settings, health
 from models.database import init_db
 from scheduler import start_scheduler, stop_scheduler
@@ -44,8 +44,8 @@ app = FastAPI(
     redirect_slashes=False,  # Prevent 301 redirects that break fetch() calls
 )
 
-# CORS — personal dashboard, allow all origins by default.
-# Optionally restrict by setting FRONTEND_URL or ALLOWED_ORIGINS in Railway Variables
+# CORS — restrict origins in production, allow wildcard only for local dev.
+# Set FRONTEND_URL or ALLOWED_ORIGINS in Railway Variables
 # (comma-separated list of origins, e.g. "https://reckoner.captainasic.dev").
 _allowed_origins_env = (
     os.getenv("ALLOWED_ORIGINS", "")
@@ -65,8 +65,17 @@ if _allowed_origins_env:
         "http://localhost:4173",
     ]
     _use_wildcard = False
+elif auth_enabled:
+    # Auth is on but no origins configured — log a warning and restrict to localhost only.
+    logger.warning("Auth is enabled but ALLOWED_ORIGINS is not set — restricting CORS to localhost")
+    _cors_origins = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:4173",
+    ]
+    _use_wildcard = False
 else:
-    # No restriction set — allow all origins (safe for personal dashboards)
+    # No auth, no origins — local dev mode, allow all origins.
     _cors_origins = ["*"]
     _use_wildcard = True
 

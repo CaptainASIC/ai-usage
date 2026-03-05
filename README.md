@@ -13,13 +13,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/CaptainASIC/reckoner/blob/main/LICENSE"><img src="https://img.shields.io/github/license/CaptainASIC/reckoner?color=blue" alt="License" /></a>
-  <a href="https://github.com/CaptainASIC/reckoner/releases"><img src="https://img.shields.io/github/v/release/CaptainASIC/reckoner?include_prereleases&color=green" alt="Release" /></a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3" /></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+" /></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/react-19-blue.svg" alt="React 19" /></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/fastapi-0.115+-blue.svg" alt="FastAPI" /></a>
   <a href="https://github.com/CaptainASIC/reckoner/stargazers"><img src="https://img.shields.io/github/stars/CaptainASIC/reckoner" alt="Stars" /></a>
   <a href="https://github.com/CaptainASIC/reckoner/issues"><img src="https://img.shields.io/github/issues/CaptainASIC/reckoner" alt="Issues" /></a>
-  <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/react-19-61dafb?logo=react&logoColor=white" alt="React" />
-  <img src="https://img.shields.io/badge/fastapi-0.115+-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
   <a href="https://ko-fi.com/captasic"><img src="https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white" alt="Ko-fi" /></a>
   <a href="https://github.com/sponsors/CaptainASIC"><img src="https://img.shields.io/badge/Sponsor-♥-ea4aaa?logo=github-sponsors&logoColor=white" alt="Sponsor" /></a>
 </p>

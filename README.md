@@ -9,7 +9,7 @@
 <h1 align="center">Reckoner</h1>
 
 <p align="center">
-  A fast, single-page dashboard for monitoring AI service credits, cloud billing, and account balances across OpenRouter, OpenAI, Anthropic, xAI, Mistral, Groq, Manus, Plaud, Railway, Neon, RunPod, mem0, AWS, GCP, Vercel, and more.
+  A fast, single-page dashboard for monitoring AI service credits, cloud billing, and account balances across OpenRouter, OpenAI, Anthropic, xAI, Mistral, Groq, Manus, Plaud, CivitAI, Railway, Neon, RunPod, mem0, AWS, GCP, Vercel, and more.
 </p>
 
 <p align="center">
@@ -49,7 +49,8 @@
 | **Groq** | AI | Session Cookie | Best-effort balance |
 | **Manus** | AI | JWT Bearer Token | Monthly credits, daily refresh, add-on balance |
 | **Gemini** | AI | API Key | Key validity only (no balance endpoint) |
-| **Plaud** | AI/Tools | JWT Bearer Token | Recording stats (files, hours, transcription) |
+|| **Plaud** | AI/Tools | JWT Bearer Token | Recording stats (files, hours, transcription) |
+|| **CivitAI** | AI | Session Cookie | Buzz credit balance |
 | **Railway** | Cloud | Account API Token | Credit balance + current billing period spend |
 | **Vercel** | Cloud | Personal Access Token | Account details |
 | **Neon DB** | Cloud | API Key | Monthly compute consumption |
@@ -163,8 +164,14 @@ Click the ⚙️ icon on any provider card to configure credentials directly in 
 3. Click any request → Headers → copy the value after `Bearer ` in the Authorization header
 4. Set `PLAUD_API_KEY` — token is valid for ~5 months
 
+### CivitAI
+1. Log in to [civitai.com](https://civitai.com)
+2. Open DevTools (F12) → Application → Cookies
+3. Copy the full Cookie header string (at minimum the `__Secure-civitai-token` cookie)
+4. Set `CIVITAI_SESSION_COOKIE`
+
 ### Railway
-1. Go to [railway.app/account/tokens](https://railway.app/account/tokens)
+1. Go to [railway.app/account/tokens]
 2. Create a new token — **select "No workspace"** to create an Account token
 3. Set `RAILWAY_CREDIT_TOKEN` (not `RAILWAY_API_KEY` — Railway injects that automatically)
 
@@ -227,6 +234,7 @@ reckoner/
 │       ├── manus.py
 │       ├── plaud.py
 │       ├── gemini.py
+│       ├── civitai.py
 │       ├── railway.py
 │       ├── vercel.py
 │       ├── neon.py

@@ -17,7 +17,7 @@ import urllib.parse
 
 import httpx
 
-from models.schemas import ProviderCredentials
+from models.schemas import BalanceSnapshot, ProviderCredentials
 from providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)

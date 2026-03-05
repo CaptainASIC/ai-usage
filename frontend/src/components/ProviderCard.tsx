@@ -151,6 +151,9 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
   const usageMonthly   = typeof raw.usage_monthly        === 'number' ? raw.usage_monthly        : null;
   const noteText       = typeof raw.note                 === 'string' ? raw.note                 : null;
 
+  // ── Billing period (Firecrawl, etc.) ──────────────────────────────────
+  const billingPeriodEnd   = typeof raw.billing_period_end   === 'string' ? raw.billing_period_end   : null;
+
   // ── Plaud-specific fields ──────────────────────────────────────────────
   const isPlaud              = snapshot.provider_id === 'plaud';
   const plaudTotalFiles      = typeof raw.plaud_total_files      === 'number' ? raw.plaud_total_files      : null;
@@ -450,6 +453,11 @@ export function ProviderCard({ snapshot, onRefreshed }: ProviderCardProps) {
                 style={{ width: `${Math.round(usagePct * 100)}%` }}
               />
             </div>
+            {billingPeriodEnd && (
+              <p className="text-xs text-gray-600 pt-0.5">
+                Resets {new Date(billingPeriodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </p>
+            )}
           </div>
         )}
 

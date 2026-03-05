@@ -26,6 +26,7 @@ from providers.base import BaseProvider
 logger = logging.getLogger(__name__)
 
 FIRECRAWL_CREDIT_URL = "https://api.firecrawl.dev/v2/team/credit-usage"
+FIRECRAWL_FREE_TIER_CREDITS = 500
 
 
 class FirecrawlProvider(BaseProvider):
@@ -79,23 +80,25 @@ class FirecrawlProvider(BaseProvider):
                     "Could not read remainingCredits from Firecrawl API response."
                 )
 
-            used = (plan - remaining) if plan is not None else None
+            # Free tier returns planCredits=0; the one-time grant is 500 credits.
+            if plan is None or plan == 0:
+                plan = FIRECRAWL_FREE_TIER_CREDITS
+
+            used = plan - remaining
 
             raw: dict = {
                 "remaining_credits": remaining,
+                "plan_credits": plan,
+                "used_credits": used,
             }
-            if plan is not None:
-                raw["plan_credits"] = plan
-            if used is not None:
-                raw["used_credits"] = used
             if data.get("billingPeriodStart"):
                 raw["billing_period_start"] = data["billingPeriodStart"]
             if data.get("billingPeriodEnd"):
                 raw["billing_period_end"] = data["billingPeriodEnd"]
 
             return self._make_snapshot(
-                total_credits     = float(plan) if plan is not None else None,
-                used_credits      = float(used) if used is not None else None,
+                total_credits     = float(plan),
+                used_credits      = float(used),
                 remaining_credits = float(remaining),
                 currency          = "credits",
                 status            = "ok",

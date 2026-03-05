@@ -49,7 +49,7 @@ export function Footer() {
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 transition-all"
           >
             <Coffee size={11} />
-            Ko-fi
+            Buy me a Ko-fi
           </a>
           <a
             href={LINKS.sponsor}
@@ -58,7 +58,7 @@ export function Footer() {
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-500/10 border border-pink-500/20 text-pink-400 hover:bg-pink-500/20 hover:text-pink-300 transition-all"
           >
             <Heart size={11} />
-            Sponsor
+            Sponsor me on GitHub
           </a>
         </div>
       </div>

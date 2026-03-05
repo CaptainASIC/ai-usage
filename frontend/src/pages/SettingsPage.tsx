@@ -34,7 +34,7 @@ interface SettingsPageProps {
 
 const PROVIDER_LOGOS: Record<string, string> = {
   openrouter: '/logos/openrouter.png',
-  openai:     '/logos/openai.svg',
+  openai:     '/logos/openai.png',
   anthropic:  '/logos/anthropic.png',
   xai:        '/logos/xai.png',
   mistral:    '/logos/mistral.png',

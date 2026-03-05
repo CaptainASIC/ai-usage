@@ -47,6 +47,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   mem0:       'from-teal-500 to-cyan-600',
   neon:       'from-green-400 to-emerald-600',
   runpod:     'from-yellow-500 to-orange-600',
+  firecrawl:  'from-orange-500 to-red-500',
   aws:        'from-orange-400 to-yellow-500',
   gcp:        'from-blue-400 to-red-400',
 };
@@ -68,6 +69,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
   mem0:       '/logos/mem0.png',
   neon:       '/logos/neon.png',
   runpod:     '/logos/runpod.png',
+  firecrawl:  '/logos/firecrawl.png',
   aws:        '/logos/aws.png',
   gcp:        '/logos/gcp.png',
 };

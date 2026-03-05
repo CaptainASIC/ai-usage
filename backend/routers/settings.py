@@ -107,13 +107,23 @@ async def clear_provider_credentials(provider_id: str):
 
 
 def _mask_credentials(creds: ProviderCredentials) -> dict:
-    """Mask sensitive credential values for API responses."""
+    """Mask sensitive credential values for API responses.
+
+    Reveals minimal characters to help users identify which key is configured:
+    - <= 8 chars: fully masked
+    - <= 16 chars: first 2 + last 2
+    - > 16 chars: first 4 + last 4
+    """
     result = {}
     for field, value in creds.model_dump().items():
-        if value and isinstance(value, str) and len(value) > 8:
-            result[field] = value[:4] + "..." + value[-4:]
-        elif value:
-            result[field] = "***"
+        if value and isinstance(value, str):
+            n = len(value)
+            if n <= 8:
+                result[field] = "***"
+            elif n <= 16:
+                result[field] = value[:2] + "..." + value[-2:]
+            else:
+                result[field] = value[:4] + "..." + value[-4:]
         else:
             result[field] = None
     return result

@@ -54,7 +54,8 @@
 | **Vercel** | Cloud | Personal Access Token | Account details |
 | **Neon DB** | Cloud | API Key | Monthly compute consumption |
 | **RunPod** | Cloud | API Key | Credit balance |
-| **mem0** | Tools | API Key | Key validity + memory count |
+|| **Firecrawl** | Cloud | API Key | Remaining/total credits + billing period |
+|| **mem0** | Tools | API Key | Key validity + memory count |
 | **AWS** | Cloud | IAM Key + Secret | Month-to-date spend via Cost Explorer |
 | **GCP** | Cloud | Service Account JSON | Month-to-date billing spend |
 
@@ -178,6 +179,11 @@ Click the ⚙️ icon on any provider card to configure credentials directly in 
 2. Create an API key
 3. Set `RUNPOD_API_KEY`
 
+### Firecrawl
+1. Go to [firecrawl.dev/app/api-keys](https://firecrawl.dev/app/api-keys)
+2. Create an API key
+3. Set `FIRECRAWL_API_KEY`
+
 ### mem0
 1. Go to [app.mem0.ai/dashboard/api-keys](https://app.mem0.ai/dashboard/api-keys)
 2. Create an API key (`m0-...`)
@@ -225,6 +231,7 @@ reckoner/
 │       ├── vercel.py
 │       ├── neon.py
 │       ├── runpod.py
+│       ├── firecrawl.py
 │       ├── mem0.py
 │       ├── aws.py
 │       └── gcp.py

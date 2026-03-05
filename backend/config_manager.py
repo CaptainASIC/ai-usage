@@ -1,7 +1,7 @@
-"""
-Configuration manager for provider settings.
+"""Configuration manager for provider settings.
+
 Reads/writes provider configs to SQLite and environment variables.
-Credentials are stored encrypted in the database.
+Credentials are encrypted at rest using Fernet (AES-128-CBC + HMAC-SHA256).
 """
 
 import json
@@ -11,6 +11,7 @@ from typing import Optional
 
 import aiosqlite
 
+import crypto
 from models.database import get_db
 from models.schemas import ProviderConfig, ProviderCredentials
 from providers import PROVIDER_REGISTRY
@@ -31,7 +32,8 @@ async def get_all_provider_configs() -> list[ProviderConfig]:
         if provider_id in rows:
             row = rows[provider_id]
             try:
-                creds_data = json.loads(row["credentials"])
+                decrypted = crypto.decrypt(row["credentials"])
+                creds_data = json.loads(decrypted)
                 credentials = ProviderCredentials(**creds_data)
             except Exception:
                 credentials = ProviderCredentials()
@@ -66,8 +68,8 @@ async def get_provider_config(provider_id: str) -> Optional[ProviderConfig]:
 
 
 async def save_provider_config(config: ProviderConfig) -> None:
-    """Save provider configuration to the database."""
-    creds_json = config.credentials.model_dump_json()
+    """Save provider configuration to the database (credentials encrypted)."""
+    creds_json = crypto.encrypt(config.credentials.model_dump_json())
 
     async with get_db() as db:
         await db.execute("""

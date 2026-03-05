@@ -76,9 +76,19 @@ class BaseProvider(ABC):
         )
 
     def _error_snapshot(self, message: str) -> BalanceSnapshot:
-        """Create an error snapshot."""
+        """Create an error snapshot.
+
+        The full message is logged server-side. The client receives a
+        sanitized version that strips upstream response bodies to avoid
+        leaking tokens or internal details.
+        """
         logger.error(f"[{self.provider_name}] Error: {message}")
-        return self._make_snapshot(status="error", error_message=message)
+        # Sanitize: keep the leading description but strip raw response bodies
+        # that might contain echoed tokens or internal details.
+        safe_msg = message
+        if ": {" in safe_msg:
+            safe_msg = safe_msg.split(": {")[0]
+        return self._make_snapshot(status="error", error_message=safe_msg)
 
     def _unconfigured_snapshot(self) -> BalanceSnapshot:
         """Create an unconfigured snapshot when credentials are missing."""

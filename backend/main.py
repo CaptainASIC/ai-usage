@@ -10,8 +10,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from auth import auth_enabled, require_auth, require_auth_if_protected
 from routers import auth, credits, settings, health
@@ -36,12 +37,18 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
+# Disable interactive API docs when auth is enabled (production).
+_is_production = auth_enabled or os.getenv("ENVIRONMENT", "").lower() == "production"
+
 app = FastAPI(
     title="Reckoner API",
     description="Backend API for monitoring cloud AI service balances and usage",
     version="1.0.0",
     lifespan=lifespan,
     redirect_slashes=False,  # Prevent 301 redirects that break fetch() calls
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 # CORS — restrict origins in production, allow wildcard only for local dev.
@@ -88,6 +95,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Security headers on every response.
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        """Process request and add security headers to response."""
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # API routes
 app.include_router(health.router, prefix="/api", tags=["health"])

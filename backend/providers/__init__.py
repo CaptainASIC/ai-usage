@@ -21,6 +21,7 @@ from providers.gemini import GeminiProvider
 # Cloud Providers
 from providers.railway import RailwayProvider
 from providers.vercel import VercelProvider
+from providers.firecrawl import FirecrawlProvider
 from providers.mem0 import Mem0Provider
 from providers.neon import NeonProvider
 from providers.runpod import RunPodProvider
@@ -223,6 +224,18 @@ CLOUD_PROVIDERS = {
         "tier": 1,
         "refresh_interval": 600,
     },
+    "firecrawl": {
+        "class": FirecrawlProvider,
+        "name": "Firecrawl",
+        "category": "cloud",
+        "auth_type": "api_key",
+        "auth_fields": [
+            {"key": "api_key", "label": "API Key", "placeholder": "fc-...", "secret": True},
+        ],
+        "auth_help": "Get your API key from firecrawl.dev/app/api-keys",
+        "tier": 1,
+        "refresh_interval": 600,
+    },
     "aws": {
         "class": AWSProvider,
         "name": "AWS",
@@ -274,6 +287,7 @@ __all__ = [
     # Cloud
     "RailwayProvider",
     "VercelProvider",
+    "FirecrawlProvider",
     "Mem0Provider",
     "NeonProvider",
     "RunPodProvider",

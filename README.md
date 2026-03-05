@@ -10,6 +10,7 @@ Live at [reckoner.captainasic.dev](https://reckoner.captainasic.dev)
 - **Auto-refresh** — balances update every 60 seconds in the browser, with background polling every 5–30 minutes
 - **Live refresh** — force an immediate refresh of any provider or all at once
 - **In-app settings** — configure credentials directly from the dashboard UI
+- **Password auth** — optional single-user password gate to protect settings and/or the full dashboard
 - **Railway-ready** — two-service deploy (frontend + backend) with `uv` and Railpack
 - **Docker support** — multi-stage Dockerfile included
 
@@ -83,6 +84,19 @@ docker run -p 8000:8000 --env-file .env reckoner
 ### Environment Variables
 
 Copy `.env.example` to `.env` and fill in your credentials. All variables are optional — only configure the services you use.
+
+### Authentication
+
+Reckoner supports optional single-user password authentication to prevent unauthorized access:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RECKONER_PASSWORD` | *(empty — auth disabled)* | Set a password to enable auth. All settings endpoints require login. |
+| `RECKONER_PROTECT_DASHBOARD` | `true` | When `true`, viewing balances also requires login. Set to `false` to keep the dashboard public while still protecting settings. |
+
+When `RECKONER_PASSWORD` is not set, auth is completely disabled and the dashboard behaves as before.
+
+Tokens are issued as JWTs with a 30-day expiry and are invalidated on backend redeploy.
 
 ### In-App Settings
 
@@ -162,11 +176,17 @@ Click the ⚙️ icon on any provider card to configure credentials directly in 
 reckoner/
 ├── backend/                  # FastAPI application
 │   ├── main.py               # App entry point
+│   ├── auth.py               # Password auth + JWT tokens
 │   ├── scheduler.py          # Background balance refresh
 │   ├── config_manager.py     # Settings persistence
 │   ├── models/
 │   │   ├── database.py       # SQLite schema + connection
 │   │   └── schemas.py        # Pydantic v2 models
+│   ├── routers/
+│   │   ├── auth.py           # Login + auth status endpoints
+│   │   ├── credits.py        # Dashboard + refresh endpoints
+│   │   ├── health.py         # Health check
+│   │   └── settings.py       # Provider credential management
 │   └── providers/            # One file per service
 │       ├── base.py           # Abstract base class
 │       ├── openrouter.py
@@ -193,8 +213,12 @@ reckoner/
 │       │   ├── SettingsModal.tsx
 │       │   └── SummaryBar.tsx
 │       ├── hooks/
+│       │   ├── useAuth.ts
 │       │   ├── useDashboard.ts
 │       │   └── useSettings.ts
+│       ├── pages/
+│       │   ├── LoginPage.tsx
+│       │   └── SettingsPage.tsx
 │       ├── types/index.ts
 │       └── utils/
 │           ├── api.ts
@@ -205,15 +229,19 @@ reckoner/
 
 ## API Reference
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `GET /api/health` | GET | Health check |
-| `GET /api/credits/` | GET | Full dashboard (cached) |
-| `POST /api/credits/refresh` | POST | Refresh all providers |
-| `POST /api/credits/refresh/{id}` | POST | Refresh single provider |
-| `GET /api/credits/providers` | GET | List providers with metadata |
-| `GET /api/settings/providers` | GET | Get settings (masked) |
-| `PUT /api/settings/providers/{id}` | PUT | Update provider credentials |
+| Endpoint | Method | Description | Auth |
+||----------|--------|-------------|------|
+| `GET /api/health` | GET | Health check | Public |
+| `GET /api/auth/status` | GET | Auth status (enabled, dashboard protected, authenticated) | Public |
+| `POST /api/auth/login` | POST | Login with password, returns JWT | Public |
+| `GET /api/credits/` | GET | Full dashboard (cached) | Protected* |
+| `POST /api/credits/refresh` | POST | Refresh all providers | Protected* |
+| `POST /api/credits/refresh/{id}` | POST | Refresh single provider | Protected* |
+| `GET /api/credits/providers` | GET | List providers with metadata | Protected* |
+| `GET /api/settings/providers` | GET | Get settings (masked) | Auth required |
+| `PUT /api/settings/providers/{id}` | PUT | Update provider credentials | Auth required |
+
+\* Protected when `RECKONER_PROTECT_DASHBOARD=true` (default). Public when set to `false`.
 
 Interactive docs available at `/docs` (FastAPI Swagger UI).
 

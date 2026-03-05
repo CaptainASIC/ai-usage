@@ -11,17 +11,21 @@
 
 import { useState } from 'react';
 import { Settings } from 'lucide-react';
+import { useAuth } from './hooks/useAuth';
 import { useDashboard } from './hooks/useDashboard';
 import { useSettings } from './hooks/useSettings';
 import { SummaryBar } from './components/SummaryBar';
 import { ProviderCard } from './components/ProviderCard';
+import { LoginPage } from './pages/LoginPage';
 import { SettingsPage } from './pages/SettingsPage';
 import type { BalanceSnapshot } from './types';
 
 export default function App() {
+  const auth = useAuth();
   const { data, loading, refreshing, error, refresh, lastFetch } = useDashboard();
   const { settings, reload: reloadSettings } = useSettings();
   const [showSettings, setShowSettings] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
 
   // Only show providers that are configured (have real data or are in ok/error state)
   const visibleProviders = (data?.providers ?? []).filter(
@@ -41,8 +45,38 @@ export default function App() {
     await refresh();
   };
 
+  const handleLogin = async (password: string): Promise<boolean> => {
+    const ok = await auth.login(password);
+    if (ok) setShowLogin(false);
+    return ok;
+  };
+
+  // ── Auth loading ───────────────────────────────────────────────────────────
+  if (auth.loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-gray-700 border-t-gray-400 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // ── Login gate ─────────────────────────────────────────────────────────────
+  // Show login page when:
+  //   1. Auth enabled + dashboard protected + not authenticated, OR
+  //   2. User explicitly clicked "Sign In" from the SummaryBar
+  if (
+    (auth.authEnabled && auth.dashboardProtected && !auth.authenticated) ||
+    (auth.authEnabled && showLogin && !auth.authenticated)
+  ) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
   // ── Settings page ──────────────────────────────────────────────────────────
   if (showSettings) {
+    // Settings always require auth when enabled — prompt login if not authenticated.
+    if (auth.authEnabled && !auth.authenticated) {
+      return <LoginPage onLogin={handleLogin} />;
+    }
     return (
       <SettingsPage
         settings={settings}
@@ -63,6 +97,10 @@ export default function App() {
         lastFetch={lastFetch}
         onRefresh={refresh}
         onSettingsClick={() => setShowSettings(true)}
+        authEnabled={auth.authEnabled}
+        authenticated={auth.authenticated}
+        onLoginClick={() => setShowLogin(true)}
+        onLogout={auth.logout}
       />
 
       {/* Main content */}

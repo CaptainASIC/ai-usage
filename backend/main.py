@@ -10,10 +10,11 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import credits, settings, health
+from auth import require_auth, require_auth_if_protected
+from routers import auth, credits, settings, health
 from models.database import init_db
 from scheduler import start_scheduler, stop_scheduler
 
@@ -81,8 +82,19 @@ app.add_middleware(
 
 # API routes
 app.include_router(health.router, prefix="/api", tags=["health"])
-app.include_router(credits.router, prefix="/api/credits", tags=["credits"])
-app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(
+    credits.router,
+    prefix="/api/credits",
+    tags=["credits"],
+    dependencies=[Depends(require_auth_if_protected)],
+)
+app.include_router(
+    settings.router,
+    prefix="/api/settings",
+    tags=["settings"],
+    dependencies=[Depends(require_auth)],
+)
 
 
 @app.get("/", include_in_schema=False)

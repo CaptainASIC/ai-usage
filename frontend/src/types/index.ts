@@ -72,3 +72,9 @@ export interface HealthResponse {
   version: string;
   db_connected: boolean;
 }
+
+export interface AuthStatus {
+  auth_enabled: boolean;
+  dashboard_protected: boolean;
+  authenticated: boolean;
+}

@@ -15,6 +15,7 @@ import { useAuth } from './hooks/useAuth';
 import { useDashboard } from './hooks/useDashboard';
 import { useSettings } from './hooks/useSettings';
 import { SummaryBar } from './components/SummaryBar';
+import { Footer } from './components/Footer';
 import { ProviderCard } from './components/ProviderCard';
 import { LoginPage } from './pages/LoginPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -201,6 +202,8 @@ export default function App() {
           </div>
         )}
       </main>
+
+      <Footer />
     </div>
   );
 }

@@ -12,6 +12,7 @@ To get credentials:
 """
 
 import logging
+import time
 import urllib.parse
 
 import httpx
@@ -24,8 +25,8 @@ logger = logging.getLogger(__name__)
 CIVITAI_BASE = "https://civitai.com"
 COOKIE_NAME = "__Secure-civitai-token"
 
-# tRPC v10 batch input format
-_BATCH_INPUT = urllib.parse.quote('{"0":{"json":null}}')
+# CivitAI tRPC requires {"json":{"authed":true}} as input
+_AUTHED_INPUT = urllib.parse.quote('{"json":{"authed":true}}')
 
 
 class CivitAIProvider(BaseProvider):
@@ -59,23 +60,18 @@ class CivitAIProvider(BaseProvider):
         client = await self.get_client()
         headers = {
             "Cookie": cookie,
-            "Accept": "application/json",
+            "Accept": "*/*",
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
             "Referer": "https://civitai.com/user/buzz-dashboard",
-            "x-trpc-source": "nextjs-react",
+            "x-client": "web",
+            "x-client-date": str(int(time.time() * 1000)),
         }
 
-        # tRPC v10 endpoints — try batch format first, then plain.
-        # Batch response shape: [{"result":{"data":{"json":{...}}}}]
-        # Plain response shape: {"result":{"data":{"json":{...}}}}
+        # CivitAI tRPC endpoints require {"json":{"authed":true}} input
         candidate_endpoints = [
-            # Batch format (primary)
-            f"{CIVITAI_BASE}/api/trpc/buzz.getBuzzAccount?batch=1&input={_BATCH_INPUT}",
-            f"{CIVITAI_BASE}/api/trpc/buzz.getUserAccount?batch=1&input={_BATCH_INPUT}",
-            # Plain format (fallback)
-            f"{CIVITAI_BASE}/api/trpc/buzz.getBuzzAccount?input=%7B%7D",
-            f"{CIVITAI_BASE}/api/trpc/buzz.getUserAccount?input=%7B%7D",
+            f"{CIVITAI_BASE}/api/trpc/buzz.getBuzzAccount?input={_AUTHED_INPUT}",
+            f"{CIVITAI_BASE}/api/trpc/buzz.getUserAccount?input={_AUTHED_INPUT}",
         ]
 
         for endpoint in candidate_endpoints:

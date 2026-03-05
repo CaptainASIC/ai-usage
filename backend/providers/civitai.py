@@ -17,7 +17,7 @@ import urllib.parse
 
 import httpx
 
-from models.schemas import BalanceSnapshot, ProviderCredentials
+from models.schemas import ProviderCredentials
 from providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
@@ -67,12 +67,6 @@ class CivitAIProvider(BaseProvider):
             "x-client": "web",
             "x-client-date": str(int(time.time() * 1000)),
         }
-
-        # CivitAI tRPC endpoints require {"json":{"authed":true}} input
-        candidate_endpoints = [
-            f"{CIVITAI_BASE}/api/trpc/buzz.getBuzzAccount?input={_AUTHED_INPUT}",
-            f"{CIVITAI_BASE}/api/trpc/buzz.getUserAccount?input={_AUTHED_INPUT}",
-        ]
 
         # Try getBuzzAccount first (has per-type breakdown)
         try:
